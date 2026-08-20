@@ -1,0 +1,32 @@
+{
+  "name": "yt-slack-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Slack — read permalinks, threads, and channel history; reply to threads; add reactions.",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "yt-slack-mcp": "index.js"
+  },
+  "scripts": {
+    "test": "node --test --experimental-test-coverage"
+  },
+  "files": [
+    "index.js"
+  ],
+  "keywords": [
+    "mcp",
+    "slack",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yentsun/slack-mcp.git"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "pdfjs-dist": "^4.0.0",
+    "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.23.0"
+  }
+}
