@@ -8,13 +8,13 @@ Implements the [Model Context Protocol](https://modelcontextprotocol.io) specifi
 
 | Tool | Description |
 |------|-------------|
-| `slack_read_permalink` | Read a message or thread from a permalink (PDFs/images included) |
+| `slack_read_permalink` | Read a message or thread from a permalink (text files, PDFs, and images included) |
 | `slack_get_replies` | Read replies for a thread by channel id + timestamp |
 | `slack_get_history` | Read recent channel history |
 | `slack_reply_to_thread` | Reply to a thread (restricted to allowed channels) |
 | `slack_add_reaction` | Add a reaction (restricted to allowed channels) |
 
-Read tools use the private Slack browser-session API (via `xoxc` / `xoxd` tokens), so they can pull private file contents — PDFs are downloaded and text-extracted (up to 50 pages / 100k chars), images are returned inline.
+Read tools use the private Slack browser-session API (via `xoxc` / `xoxd` tokens), so they can pull private file contents — text files are returned inline (up to 10 MB / 100k characters), PDFs are downloaded and text-extracted (up to 50 pages / 100k chars), and images are returned inline. Permalinks for channels, DMs, and group DMs are supported.
 
 ## Setup
 

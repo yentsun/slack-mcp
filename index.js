@@ -25,6 +25,8 @@ const maxImageBytes = 10 * 1024 * 1024;
 const maxPdfBytes = 20 * 1024 * 1024;
 const maxPdfPages = 50;
 const maxPdfTextCharacters = 100_000;
+const maxTextFileBytes = 10 * 1024 * 1024;
+const maxTextFileCharacters = 100_000;
 
 function expandHome(filePath) {
     if (!filePath) {
@@ -189,6 +191,27 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         return extractPdfText(pdfData);
     };
 
+    const downloadSlackText = async (file) => {
+        const fileData = await getSlackFileData(file);
+        const textUrl = fileData.url_private_download || fileData.url_private;
+        if (!textUrl) {
+            throw new Error("Slack did not provide a private text file URL");
+        }
+        const response = await fetch(textUrl, { headers: slackHeaders() });
+        if (!response.ok) {
+            throw new Error(`Slack text file download failed: ${response.status}`);
+        }
+        const textData = await response.arrayBuffer();
+        if (textData.byteLength > maxTextFileBytes) {
+            throw new Error(`text file exceeds ${maxTextFileBytes / 1024 / 1024} MB limit`);
+        }
+        let text = Buffer.from(textData).toString("utf8");
+        if (text.length > maxTextFileCharacters) {
+            text = `${text.slice(0, maxTextFileCharacters)}\n\n[Text file truncated at ${maxTextFileCharacters} characters]`;
+        }
+        return text;
+    };
+
     const formatMessages = async (messages) => {
         if (!messages.length) {
             return [{ type: "text", text: "No messages found." }];
@@ -225,6 +248,15 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
                     } catch (error) {
                         content.push({ type: "text", text: `PDF unavailable: ${error.message}` });
                     }
+                    continue;
+                }
+                if (file.mimetype?.startsWith("text/")) {
+                    try {
+                        const title = file.title || file.name || file.id || "untitled";
+                        content.push({ type: "text", text: `Text file: ${title}\n\n${await downloadSlackText(file)}` });
+                    } catch (error) {
+                        content.push({ type: "text", text: `Text file unavailable: ${error.message}` });
+                    }
                 }
             }
         }
@@ -235,7 +267,7 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
 }
 
 function parsePermalink(url) {
-    const match = url.match(/\/archives\/(C[A-Z0-9]+)\/p(\d{10})(\d{6})/);
+    const match = url.match(/\/archives\/([CDG][A-Z0-9]+)\/p(\d{10})(\d{6})/);
     if (!match) {
         throw new Error("invalid Slack permalink");
     }
@@ -289,7 +321,7 @@ const AddReactionSchema = z.object({
 const TOOLS = [
     {
         name: "slack_read_permalink",
-        description: "Read a Slack message or thread from a permalink, including extracted text from attached PDFs and images.",
+        description: "Read a Slack message or thread from a permalink, including inline text files, extracted PDFs, and images.",
         inputSchema: zodToJsonSchema(ReadPermalinkSchema),
     },
     {
