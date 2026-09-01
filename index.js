@@ -18,7 +18,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 
-const DEFAULT_SECRETS_DIR = path.join(os.homedir(), ".config", "opencode", "secrets");
+const DEFAULT_SECRETS_DIR = path.join(os.homedir(), ".config", "yt-slack-mcp", "secrets");
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".config", "yt-slack-mcp", "config.json");
 
 const maxImageBytes = 10 * 1024 * 1024;

@@ -1,20 +1,26 @@
 # yt-slack-mcp
 
-MCP server for **Slack** — read permalinks, threads, and channel history; reply to threads; add reactions.
+A host-agnostic [Model Context Protocol](https://modelcontextprotocol.io) server for Slack. It communicates over stdio and can be used with any MCP client that launches local servers.
 
-Implements the [Model Context Protocol](https://modelcontextprotocol.io) specification: it runs over the stdio transport, speaks JSON-RPC 2.0, negotiates the protocol version on `initialize`, advertises `tools` capabilities, and describes each tool with a JSON Schema. Protocol version negotiation is handled by the `@modelcontextprotocol/sdk` `Server` class, which defaults to the latest supported version.
+## Features
+
+- Read Slack channel history and thread replies.
+- Read message permalinks from channels, DMs, and group DMs.
+- Return image attachments inline, extract text from PDFs, and return `text/*` attachment contents inline.
+- Retrieve private attachment contents through the authenticated Slack browser session.
+- Reply to a thread or add a reaction only in explicitly allowed channel IDs.
+
+Attachment limits: images and text files are limited to 10 MB; text attachments are truncated at 100,000 characters. PDFs are limited to 20 MB, 50 pages, and 100,000 extracted characters.
 
 ## Tools
 
 | Tool | Description |
 |------|-------------|
-| `slack_read_permalink` | Read a message or thread from a permalink (text files, PDFs, and images included) |
-| `slack_get_replies` | Read replies for a thread by channel id + timestamp |
-| `slack_get_history` | Read recent channel history |
-| `slack_reply_to_thread` | Reply to a thread (restricted to allowed channels) |
-| `slack_add_reaction` | Add a reaction (restricted to allowed channels) |
-
-Read tools use the private Slack browser-session API (via `xoxc` / `xoxd` tokens), so they can pull private file contents — text files are returned inline (up to 10 MB / 100k characters), PDFs are downloaded and text-extracted (up to 50 pages / 100k chars), and images are returned inline. Permalinks for channels, DMs, and group DMs are supported.
+| `slack_read_permalink` | Read a message or thread from a channel, DM, or group-DM permalink, including supported attachments. |
+| `slack_get_replies` | Read replies for a thread by channel ID and timestamp. |
+| `slack_get_history` | Read recent channel history. |
+| `slack_reply_to_thread` | Reply to a thread; restricted to allowed channels. |
+| `slack_add_reaction` | Add a reaction; restricted to allowed channels. |
 
 ## Setup
 
@@ -25,16 +31,16 @@ Read tools use the private Slack browser-session API (via `xoxc` / `xoxd` tokens
 
 These may need refreshing when Slack rotates/invalidates the session.
 
-### 2. Place the secrets
+### 2. Store the secrets
 
 Save each token as a single-line file:
 
 ```
-~/.config/opencode/secrets/slack-xoxc.txt
-~/.config/opencode/secrets/slack-xoxd.txt
+~/.config/yt-slack-mcp/secrets/slack-xoxc.txt
+~/.config/yt-slack-mcp/secrets/slack-xoxd.txt
 ```
 
-Or override the paths via the config file or env vars.
+The server reads these paths by default. Override them with the config file or environment variables if your MCP host manages secrets elsewhere.
 
 ### 3. (Optional) Configure allowed write channels and paths
 
@@ -43,9 +49,9 @@ All configuration can live in a JSON config file at
 
 ```json
 {
-  "secretsDir": "~/.config/opencode/secrets",
-  "xoxcPath": "~/.config/opencode/secrets/slack-xoxc.txt",
-  "xoxdPath": "~/.config/opencode/secrets/slack-xoxd.txt",
+  "secretsDir": "~/.config/yt-slack-mcp/secrets",
+  "xoxcPath": "~/.config/yt-slack-mcp/secrets/slack-xoxc.txt",
+  "xoxdPath": "~/.config/yt-slack-mcp/secrets/slack-xoxd.txt",
   "allowedWriteChannels": ["C0123456789", "C0987654321"],
   "userAgent": "Mozilla/5.0"
 }
@@ -61,29 +67,22 @@ Config resolution order: built-in defaults → config file → env vars.
 
 | Config file key | Env var | Default | Description |
 |-----------------|---------|---------|-------------|
-| `secretsDir` | `SLACK_MCP_SECRETS_DIR` | `~/.config/opencode/secrets` | Directory holding the token files |
+| `secretsDir` | `SLACK_MCP_SECRETS_DIR` | `~/.config/yt-slack-mcp/secrets` | Directory holding the token files |
 | `xoxcPath` | `SLACK_MCP_XOXC_PATH` | `$SECRETS_DIR/slack-xoxc.txt` | Path to the `xoxc` token |
 | `xoxdPath` | `SLACK_MCP_XOXD_PATH` | `$SECRETS_DIR/slack-xoxd.txt` | Path to the `xoxd` token |
 | `allowedWriteChannels` | `SLACK_MCP_ALLOWED_WRITE_CHANNELS` | *(none)* | Channel IDs allowed for write tools (comma-separated in env) |
 | `userAgent` | `SLACK_MCP_USER_AGENT` | `Mozilla/5.0` | HTTP `User-Agent` header |
 | *(config file path)* | `SLACK_MCP_CONFIG` | `~/.config/yt-slack-mcp/config.json` | Path to the JSON config file |
 
-## MCP host config
+## MCP host configuration
 
-### opencode
+Configure your MCP host to run `yt-slack-mcp` over stdio. The host-specific configuration varies, but the command is:
 
-```jsonc
-{
-  "mcp": {
-    "slack": {
-      "type": "local",
-      "command": ["npx", "yt-slack-mcp"]
-    }
-  }
-}
+```
+npx yt-slack-mcp
 ```
 
-### Claude Desktop
+For example, Claude Desktop uses:
 
 ```json
 {

@@ -20,7 +20,7 @@ test("parseChannelList parses comma lists and ignores blanks", () => {
 
 test("loadConfig uses defaults when no config and no env", () => {
     const config = loadConfig({ SLACK_MCP_CONFIG: "C:/nonexistent/config.json" });
-    assert.equal(config.secretsDir, path.join(os.homedir(), ".config", "opencode", "secrets"));
+    assert.equal(config.secretsDir, path.join(os.homedir(), ".config", "yt-slack-mcp", "secrets"));
     assert.equal(config.xoxcPath, path.join(config.secretsDir, "slack-xoxc.txt"));
     assert.equal(config.xoxdPath, path.join(config.secretsDir, "slack-xoxd.txt"));
     assert.deepEqual(config.allowedWriteChannels, []);
