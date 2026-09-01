@@ -8,7 +8,7 @@ A host-agnostic [Model Context Protocol](https://modelcontextprotocol.io) server
 - Read message permalinks from channels, DMs, and group DMs.
 - Return image attachments inline, extract text from PDFs, and return `text/*` attachment contents inline.
 - Retrieve private attachment contents through the authenticated Slack browser session.
-- Reply to a thread or add a reaction only in explicitly allowed channel IDs.
+- Reply to a thread, add a reaction, or upload local files only in explicitly allowed channel IDs.
 
 Attachment limits: images and text files are limited to 10 MB; text attachments are truncated at 100,000 characters. PDFs are limited to 20 MB, 50 pages, and 100,000 extracted characters.
 
@@ -21,6 +21,7 @@ Attachment limits: images and text files are limited to 10 MB; text attachments 
 | `slack_get_history` | Read recent channel history. |
 | `slack_reply_to_thread` | Reply to a thread; restricted to allowed channels. |
 | `slack_add_reaction` | Add a reaction; restricted to allowed channels. |
+| `slack_upload_files` | Upload up to 10 local files to a channel or thread, with an optional initial comment; returns file and message permalinks; restricted to allowed channels. |
 
 ## Setup
 
@@ -58,7 +59,7 @@ All configuration can live in a JSON config file at
 ```
 
 By default the write tools (`slack_reply_to_thread`, `slack_add_reaction`)
-are locked down — no channel is writable. Every field is optional; a
+and `slack_upload_files` are locked down — no channel is writable. Each upload is limited to 10 MB. Every field is optional; a
 missing file just means defaults. Env vars always override the config file.
 
 ## Configuration

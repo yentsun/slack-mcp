@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createExecuteToolCall, createSlackClient } from "../index.js";
 
 function deps(overrides = {}) {
@@ -8,6 +11,7 @@ function deps(overrides = {}) {
         slackApi: async () => ({ ok: true, messages: [] }),
         formatMessages: async (messages) =>
             messages.length ? [{ type: "text", text: messages[0].text || "" }] : [{ type: "text", text: "No messages found." }],
+        uploadSlackFiles: async () => [],
     };
     Object.assign(d, overrides);
     return d;
@@ -143,6 +147,69 @@ test("formatMessages stops downloading text attachments that exceed the size lim
     assert.match(content[1].text, /Text file unavailable: text file exceeds 10 MB limit/);
 });
 
+test("uploadSlackFiles uploads local files and completes the Slack upload", async (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "slack-mcp-upload-"));
+    const filePath = path.join(directory, "contract.md");
+    fs.writeFileSync(filePath, "# Contract\n");
+    const originalFetch = globalThis.fetch;
+    t.after(() => {
+        globalThis.fetch = originalFetch;
+        fs.rmSync(directory, { recursive: true, force: true });
+    });
+    globalThis.fetch = async (url, options) => {
+        if (url === "https://upload.slack.com/F1") {
+            assert.equal(options.method, "POST");
+            assert.deepEqual(options.body, Buffer.from("# Contract\n"));
+            return new Response("", { status: 200 });
+        }
+        assert.match(options.headers.authorization || "", /^Bearer xoxc-test$/);
+        if (String(url).startsWith("https://slack.com/api/files.getUploadURLExternal")) {
+            const params = new URLSearchParams(options.body);
+            assert.equal(params.get("filename"), "contract.md");
+            assert.equal(params.get("length"), "11");
+            return Response.json({ ok: true, upload_url: "https://upload.slack.com/F1", file_id: "F1" });
+        }
+        if (String(url).startsWith("https://slack.com/api/files.info")) {
+            assert.equal(new URL(url).searchParams.get("file"), "F1");
+            return Response.json({
+                ok: true,
+                file: {
+                    id: "F1",
+                    title: "contract.md",
+                    permalink: "https://example.slack.com/files/U1/F1",
+                    shares: { public: { C1: [{ ts: "1234567890.123456" }] } },
+                },
+            });
+        }
+        if (String(url).startsWith("https://slack.com/api/chat.getPermalink")) {
+            const params = new URL(url).searchParams;
+            assert.equal(params.get("channel"), "C1");
+            assert.equal(params.get("message_ts"), "1234567890.123456");
+            return Response.json({ ok: true, permalink: "https://example.slack.com/archives/C1/p1234567890123456" });
+        }
+        assert.match(String(url), /files\.completeUploadExternal/);
+        const params = new URLSearchParams(options.body);
+        assert.equal(params.get("channel_id"), "C1");
+        assert.equal(params.get("thread_ts"), "123.456");
+        assert.equal(params.get("initial_comment"), "Here is the contract.");
+        assert.deepEqual(JSON.parse(params.get("files")), [{ id: "F1", title: "contract.md" }]);
+        return Response.json({
+            ok: true,
+            files: [{ id: "F1", title: "contract.md", url_private: "https://files.slack.com/files-pri/T1-F1/contract.md" }],
+        });
+    };
+    const { uploadSlackFiles } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    const files = await uploadSlackFiles({
+        filePaths: [filePath],
+        channelId: "C1",
+        threadTs: "123.456",
+        initialComment: "Here is the contract.",
+    });
+
+    assert.equal(files[0].message_permalink, "https://example.slack.com/archives/C1/p1234567890123456");
+});
+
 test("slack_get_history calls conversations.history", async () => {
     let captured;
     const exec = createExecuteToolCall(
@@ -226,6 +293,49 @@ test("slack_add_reaction rejects disallowed channel", async () => {
                 timestamp: "123.456",
                 reaction: "x",
             }),
+        /writes are not allowed/
+    );
+});
+
+test("slack_upload_files uploads to an allowed thread and returns permalinks", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            uploadSlackFiles: async (args) => {
+                captured = args;
+                return [{
+                    id: "F1",
+                    title: "contract.md",
+                    permalink: "https://example.slack.com/files/U1/F1",
+                    message_permalink: "https://example.slack.com/archives/C1/p1234567890123456",
+                }];
+            },
+        })
+    );
+
+    const result = await exec("slack_upload_files", {
+        channel_id: "C1",
+        file_paths: ["C:/tmp/contract.md"],
+        thread_ts: "123.456",
+        initial_comment: "Here is the contract.",
+    });
+
+    assert.deepEqual(captured, {
+        channelId: "C1",
+        filePaths: ["C:/tmp/contract.md"],
+        threadTs: "123.456",
+        initialComment: "Here is the contract.",
+    });
+    assert.match(text(result), /uploaded file: contract\.md/);
+    assert.match(text(result), /file permalink: https:\/\/example\.slack\.com\/files\/U1\/F1/);
+    assert.match(text(result), /https:\/\/example\.slack\.com\/archives\/C1\/p1234567890123456/);
+});
+
+test("slack_upload_files rejects disallowed channels", async () => {
+    const exec = createExecuteToolCall(deps({ allowedWriteChannels: ["C1"] }));
+    await assert.rejects(
+        () => exec("slack_upload_files", { channel_id: "C2", file_paths: ["C:/tmp/contract.md"] }),
         /writes are not allowed/
     );
 });

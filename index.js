@@ -27,6 +27,7 @@ const maxPdfPages = 50;
 const maxPdfTextCharacters = 100_000;
 const maxTextFileBytes = 10 * 1024 * 1024;
 const maxTextFileCharacters = 100_000;
+const maxUploadBytes = 10 * 1024 * 1024;
 
 function expandHome(filePath) {
     if (!filePath) {
@@ -110,8 +111,8 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         return data;
     };
 
-    const getSlackFileData = async (file) => {
-        if (file.url_private_download || file.url_private || !file.id) {
+    const getSlackFileData = async (file, { refresh = false } = {}) => {
+        if (!refresh && (file.url_private_download || file.url_private || !file.id)) {
             return file;
         }
         const response = await slackApi("files.info", { file: file.id });
@@ -229,6 +230,71 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         return text;
     };
 
+    const uploadSlackFiles = async ({ filePaths, channelId, threadTs, initialComment }) => {
+        const localFiles = filePaths.map((filePath) => {
+            const fileStats = fs.statSync(filePath);
+            if (!fileStats.isFile()) {
+                throw new Error(`not a file: ${filePath}`);
+            }
+            if (fileStats.size > maxUploadBytes) {
+                throw new Error(`file exceeds ${maxUploadBytes / 1024 / 1024} MB limit: ${filePath}`);
+            }
+            const data = fs.readFileSync(filePath);
+            if (data.length > maxUploadBytes) {
+                throw new Error(`file exceeds ${maxUploadBytes / 1024 / 1024} MB limit: ${filePath}`);
+            }
+            return { name: path.basename(filePath), data };
+        });
+
+        const uploadedFiles = [];
+        for (const file of localFiles) {
+            const upload = await slackApi("files.getUploadURLExternal", {
+                filename: file.name,
+                length: String(file.data.length),
+            }, "POST");
+            if (!upload.upload_url || !upload.file_id) {
+                throw new Error("Slack did not provide an upload URL or file ID");
+            }
+            const response = await fetch(upload.upload_url, {
+                method: "POST",
+                headers: { "content-type": "application/octet-stream" },
+                body: file.data,
+            });
+            if (!response.ok) {
+                throw new Error(`Slack file upload failed: ${response.status}`);
+            }
+            uploadedFiles.push({ id: upload.file_id, title: file.name });
+        }
+
+        const completeParams = {
+            files: JSON.stringify(uploadedFiles),
+            channel_id: channelId,
+        };
+        if (threadTs) completeParams.thread_ts = threadTs;
+        if (initialComment) completeParams.initial_comment = initialComment;
+        const completed = await slackApi("files.completeUploadExternal", completeParams, "POST");
+        if (!completed.files?.length) {
+            throw new Error("Slack did not return uploaded file details");
+        }
+        return Promise.all(completed.files.map(async (file) => {
+            const fileData = await getSlackFileData(file, { refresh: true });
+            const shares = Object.values(fileData.shares || {});
+            const share = shares.flatMap((shareType) => shareType[channelId] || []).at(0);
+            if (!share?.ts) {
+                return fileData;
+            }
+            try {
+                const permalink = await slackApi("chat.getPermalink", {
+                    channel: channelId,
+                    message_ts: share.ts,
+                });
+                return { ...fileData, message_permalink: permalink.permalink };
+            } catch {
+                return fileData;
+            }
+        }));
+    };
+
     const formatMessages = async (messages) => {
         if (!messages.length) {
             return [{ type: "text", text: "No messages found." }];
@@ -280,7 +346,7 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         return content;
     };
 
-    return { slackApi, formatMessages };
+    return { slackApi, formatMessages, uploadSlackFiles };
 }
 
 function parsePermalink(url) {
@@ -333,6 +399,13 @@ const AddReactionSchema = z.object({
     reaction: z.string().describe("Emoji name without colons."),
 });
 
+const UploadFilesSchema = z.object({
+    channel_id: z.string(),
+    file_paths: z.array(z.string().min(1)).min(1).max(10),
+    thread_ts: z.string().optional(),
+    initial_comment: z.string().optional(),
+});
+
 // ── Tool definitions ─────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -361,11 +434,16 @@ const TOOLS = [
         description: "Add a reaction to a Slack message. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(AddReactionSchema),
     },
+    {
+        name: "slack_upload_files",
+        description: "Upload one or more local files to a channel or thread. Restricted to allowed channels.",
+        inputSchema: zodToJsonSchema(UploadFilesSchema),
+    },
 ];
 
 // ── Execute factory (exported for tests) ─────────────────────────────────────
 
-function createExecuteToolCall({ slackApi, formatMessages, allowedWriteChannels }) {
+function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, allowedWriteChannels }) {
     const allowed = new Set(allowedWriteChannels);
     return async function executeToolCall(name, args) {
         switch (name) {
@@ -423,6 +501,24 @@ function createExecuteToolCall({ slackApi, formatMessages, allowedWriteChannels 
                 return { content: [{ type: "text", text: "added reaction" }] };
             }
 
+            case "slack_upload_files": {
+                const a = UploadFilesSchema.parse(args);
+                const channelId = requireString(a.channel_id, "channel_id");
+                assertAllowedWriteChannel(channelId, allowed);
+                const files = await uploadSlackFiles({
+                    filePaths: a.file_paths,
+                    channelId,
+                    threadTs: a.thread_ts && requireString(a.thread_ts, "thread_ts"),
+                    initialComment: a.initial_comment,
+                });
+                return {
+                    content: files.map((file) => ({
+                        type: "text",
+                        text: `uploaded file: ${file.title || file.name || file.id}\nfile permalink: ${file.permalink || "unavailable"}\nmessage permalink: ${file.message_permalink || "unavailable"}`,
+                    })),
+                };
+            }
+
             default:
                 throw new Error(`Unknown tool: ${name}`);
         }
@@ -449,14 +545,14 @@ async function main() {
         process.exit(1);
     }
 
-    const { slackApi, formatMessages } = createSlackClient({ xoxcToken, xoxdToken, userAgent: config.userAgent });
+    const { slackApi, formatMessages, uploadSlackFiles } = createSlackClient({ xoxcToken, xoxdToken, userAgent: config.userAgent });
 
     const server = new Server(
         { name: "yt-slack-mcp", version: "0.1.0" },
         {
             capabilities: { tools: {} },
             instructions:
-                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction (restricted to allowed channels).",
+                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_upload_files (restricted to allowed channels).",
         }
     );
 
@@ -465,6 +561,7 @@ async function main() {
     const executeToolCall = createExecuteToolCall({
         slackApi,
         formatMessages,
+        uploadSlackFiles,
         allowedWriteChannels: config.allowedWriteChannels,
     });
 
@@ -509,4 +606,5 @@ export {
     GetHistorySchema,
     ReplyToThreadSchema,
     AddReactionSchema,
+    UploadFilesSchema,
 };
