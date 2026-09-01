@@ -19,6 +19,15 @@ test("parsePermalink extracts channel and timestamp", () => {
     assert.equal(timestamp, "1234567890.123456");
 });
 
+test("parsePermalink accepts direct-message and group-DM channels", () => {
+    for (const channelId of ["D0123456789", "G0123456789"]) {
+        const result = parsePermalink(
+            `https://example.slack.com/archives/${channelId}/p1234567890123456`
+        );
+        assert.equal(result.channelId, channelId);
+    }
+});
+
 test("parsePermalink rejects bad urls", () => {
     assert.throws(() => parsePermalink("https://example.com"), /invalid Slack permalink/);
 });
