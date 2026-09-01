@@ -201,11 +201,28 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         if (!response.ok) {
             throw new Error(`Slack text file download failed: ${response.status}`);
         }
-        const textData = await response.arrayBuffer();
-        if (textData.byteLength > maxTextFileBytes) {
+        const contentLength = Number(response.headers.get("content-length"));
+        if (Number.isFinite(contentLength) && contentLength > maxTextFileBytes) {
+            await response.body?.cancel();
             throw new Error(`text file exceeds ${maxTextFileBytes / 1024 / 1024} MB limit`);
         }
-        let text = Buffer.from(textData).toString("utf8");
+        const reader = response.body?.getReader();
+        if (!reader) {
+            throw new Error("Slack returned an empty text file response");
+        }
+        const chunks = [];
+        let byteLength = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            byteLength += value.byteLength;
+            if (byteLength > maxTextFileBytes) {
+                await reader.cancel();
+                throw new Error(`text file exceeds ${maxTextFileBytes / 1024 / 1024} MB limit`);
+            }
+            chunks.push(Buffer.from(value));
+        }
+        let text = Buffer.concat(chunks, byteLength).toString("utf8");
         if (text.length > maxTextFileCharacters) {
             text = `${text.slice(0, maxTextFileCharacters)}\n\n[Text file truncated at ${maxTextFileCharacters} characters]`;
         }
