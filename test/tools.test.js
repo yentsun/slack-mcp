@@ -340,6 +340,113 @@ test("slack_upload_files rejects disallowed channels", async () => {
     );
 });
 
+test("slack_edit_message updates an allowed message and returns the permalink", async () => {
+    const calls = [];
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params, httpMethod) => {
+                calls.push({ method, params, httpMethod });
+                if (method === "chat.update") {
+                    return { ok: true, ts: "123.456", text: "updated text" };
+                }
+                return { ok: true, permalink: "https://example.slack.com/archives/C1/p1234567890123456" };
+            },
+        })
+    );
+
+    const result = await exec("slack_edit_message", {
+        channel_id: "C1",
+        timestamp: "123.456",
+        text: "updated text",
+    });
+
+    assert.deepEqual(calls[0], {
+        method: "chat.update",
+        params: { channel: "C1", ts: "123.456", text: "updated text" },
+        httpMethod: "POST",
+    });
+    assert.equal(calls[1].method, "chat.getPermalink");
+    assert.equal(
+        text(result),
+        "edited message 123.456\npermalink: https://example.slack.com/archives/C1/p1234567890123456"
+    );
+});
+
+test("slack_edit_message edits a thread reply by its timestamp", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params) => {
+                if (method === "chat.update") {
+                    captured = params;
+                    return { ok: true, ts: params.ts };
+                }
+                return { ok: true };
+            },
+        })
+    );
+
+    await exec("slack_edit_message", {
+        channel_id: "C1",
+        timestamp: "1784549814.834729",
+        text: "corrected deployment status",
+    });
+
+    assert.equal(captured.channel, "C1");
+    assert.equal(captured.ts, "1784549814.834729");
+    assert.equal(captured.text, "corrected deployment status");
+});
+
+test("slack_edit_message rejects disallowed channels", async () => {
+    const exec = createExecuteToolCall(deps({ allowedWriteChannels: ["C1"] }));
+    await assert.rejects(
+        () => exec("slack_edit_message", { channel_id: "C2", timestamp: "123.456", text: "x" }),
+        /writes are not allowed/
+    );
+});
+
+test("slack_edit_message surfaces an actionable error when Slack rejects the edit", async () => {
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method) => {
+                if (method === "chat.update") {
+                    throw new Error("slack chat.update failed: cant_update_message");
+                }
+                return { ok: true };
+            },
+        })
+    );
+    await assert.rejects(
+        () => exec("slack_edit_message", { channel_id: "C1", timestamp: "123.456", text: "x" }),
+        /could not edit message 123\.456 in C1: cant_update_message\. Slack only allows editing messages authored by this account/
+    );
+});
+
+test("slack_edit_message omits the permalink when chat.getPermalink fails", async () => {
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params) => {
+                if (method === "chat.update") {
+                    return { ok: true, ts: params.ts };
+                }
+                throw new Error("slack chat.getPermalink failed: message_not_found");
+            },
+        })
+    );
+
+    const result = await exec("slack_edit_message", {
+        channel_id: "C1",
+        timestamp: "123.456",
+        text: "updated text",
+    });
+
+    assert.equal(text(result), "edited message 123.456");
+});
+
 test("unknown tool throws", async () => {
     const exec = createExecuteToolCall(deps());
     await assert.rejects(() => exec("nope", {}), /Unknown tool: nope/);
