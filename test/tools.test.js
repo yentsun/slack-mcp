@@ -425,6 +425,28 @@ test("slack_edit_message surfaces an actionable error when Slack rejects the edi
     );
 });
 
+test("slack_edit_message omits the permalink when chat.getPermalink fails", async () => {
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params) => {
+                if (method === "chat.update") {
+                    return { ok: true, ts: params.ts };
+                }
+                throw new Error("slack chat.getPermalink failed: message_not_found");
+            },
+        })
+    );
+
+    const result = await exec("slack_edit_message", {
+        channel_id: "C1",
+        timestamp: "123.456",
+        text: "updated text",
+    });
+
+    assert.equal(text(result), "edited message 123.456");
+});
+
 test("unknown tool throws", async () => {
     const exec = createExecuteToolCall(deps());
     await assert.rejects(() => exec("nope", {}), /Unknown tool: nope/);

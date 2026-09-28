@@ -447,7 +447,7 @@ const TOOLS = [
     },
     {
         name: "slack_edit_message",
-        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Restricted to allowed channels.",
+        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text; any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(EditMessageSchema),
     },
 ];
@@ -544,7 +544,7 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                         text,
                     }, "POST");
                 } catch (error) {
-                    const reason = error.message.replace(/^slack chat\.update failed: /, "");
+                    const reason = String(error?.message ?? error).replace(/^slack chat\.update failed: /, "");
                     throw new Error(
                         `could not edit message ${timestamp} in ${channelId}: ${reason}. ` +
                             "Slack only allows editing messages authored by this account, within its edit window, and in a channel the caller can write to."

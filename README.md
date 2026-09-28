@@ -22,7 +22,7 @@ Attachment limits: images and text files are limited to 10 MB; text attachments 
 | `slack_reply_to_thread` | Reply to a thread; restricted to allowed channels. |
 | `slack_add_reaction` | Add a reaction; restricted to allowed channels. |
 | `slack_upload_files` | Upload up to 10 local files to a channel or thread, with an optional initial comment; returns file and message permalinks; restricted to allowed channels. |
-| `slack_edit_message` | Edit an authored message or thread reply by channel ID and timestamp, returning the updated timestamp and permalink; restricted to allowed channels. |
+| `slack_edit_message` | Edit an authored message or thread reply by channel ID and timestamp; replaces the message text (Slack removes any existing Block Kit blocks) and returns the updated timestamp and permalink; restricted to allowed channels. |
 
 ## Setup
 
