@@ -406,6 +406,12 @@ const UploadFilesSchema = z.object({
     initial_comment: z.string().optional(),
 });
 
+const EditMessageSchema = z.object({
+    channel_id: z.string(),
+    timestamp: z.string().describe("Timestamp of the message or thread reply to edit."),
+    text: z.string(),
+});
+
 // ── Tool definitions ─────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -438,6 +444,11 @@ const TOOLS = [
         name: "slack_upload_files",
         description: "Upload one or more local files to a channel or thread. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(UploadFilesSchema),
+    },
+    {
+        name: "slack_edit_message",
+        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Restricted to allowed channels.",
+        inputSchema: zodToJsonSchema(EditMessageSchema),
     },
 ];
 
@@ -519,6 +530,42 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                 };
             }
 
+            case "slack_edit_message": {
+                const a = EditMessageSchema.parse(args);
+                const channelId = requireString(a.channel_id, "channel_id");
+                assertAllowedWriteChannel(channelId, allowed);
+                const timestamp = requireString(a.timestamp, "timestamp");
+                const text = requireString(a.text, "text");
+                let updated;
+                try {
+                    updated = await slackApi("chat.update", {
+                        channel: channelId,
+                        ts: timestamp,
+                        text,
+                    }, "POST");
+                } catch (error) {
+                    const reason = error.message.replace(/^slack chat\.update failed: /, "");
+                    throw new Error(
+                        `could not edit message ${timestamp} in ${channelId}: ${reason}. ` +
+                            "Slack only allows editing messages authored by this account, within its edit window, and in a channel the caller can write to."
+                    );
+                }
+                const messageTs = updated.ts || timestamp;
+                let permalink;
+                try {
+                    const result = await slackApi("chat.getPermalink", {
+                        channel: channelId,
+                        message_ts: messageTs,
+                    });
+                    permalink = result.permalink;
+                } catch {
+                    permalink = undefined;
+                }
+                const lines = [`edited message ${messageTs}`];
+                if (permalink) lines.push(`permalink: ${permalink}`);
+                return { content: [{ type: "text", text: lines.join("\n") }] };
+            }
+
             default:
                 throw new Error(`Unknown tool: ${name}`);
         }
@@ -552,7 +599,7 @@ async function main() {
         {
             capabilities: { tools: {} },
             instructions:
-                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_upload_files (restricted to allowed channels).",
+                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels).",
         }
     );
 
@@ -607,4 +654,5 @@ export {
     ReplyToThreadSchema,
     AddReactionSchema,
     UploadFilesSchema,
+    EditMessageSchema,
 };

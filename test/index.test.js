@@ -9,6 +9,7 @@ import {
     GetHistorySchema,
     ReplyToThreadSchema,
     AddReactionSchema,
+    EditMessageSchema,
 } from "../index.js";
 
 test("parsePermalink extracts channel and timestamp", () => {
@@ -72,4 +73,10 @@ test("ReplyToThreadSchema requires all fields", () => {
 
 test("AddReactionSchema requires all fields", () => {
     assert.throws(() => AddReactionSchema.parse({}));
+});
+
+test("EditMessageSchema requires all fields", () => {
+    assert.throws(() => EditMessageSchema.parse({}));
+    const parsed = EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x" });
+    assert.equal(parsed.text, "x");
 });
