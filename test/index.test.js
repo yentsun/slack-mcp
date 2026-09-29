@@ -10,7 +10,22 @@ import {
     ReplyToThreadSchema,
     AddReactionSchema,
     EditMessageSchema,
+    TOOLS,
 } from "../index.js";
+
+test("every tool declares explicit MCP behavior annotations", () => {
+    const expected = {
+        slack_read_permalink: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        slack_get_replies: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        slack_get_history: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        slack_reply_to_thread: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        slack_add_reaction: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        slack_upload_files: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        slack_edit_message: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    };
+
+    assert.deepEqual(Object.fromEntries(TOOLS.map(({ name, annotations }) => [name, annotations])), expected);
+});
 
 test("parsePermalink extracts channel and timestamp", () => {
     const { channelId, timestamp } = parsePermalink(
