@@ -419,43 +419,36 @@ const TOOLS = [
         name: "slack_read_permalink",
         description: "Read a Slack message or thread from a permalink, including inline text files, extracted PDFs, and images.",
         inputSchema: zodToJsonSchema(ReadPermalinkSchema),
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     {
         name: "slack_get_replies",
         description: "Read replies for a Slack thread by channel id and thread timestamp.",
         inputSchema: zodToJsonSchema(GetRepliesSchema),
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     {
         name: "slack_get_history",
         description: "Read recent Slack channel history.",
         inputSchema: zodToJsonSchema(GetHistorySchema),
-        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     {
         name: "slack_reply_to_thread",
         description: "Reply to a Slack thread. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(ReplyToThreadSchema),
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     {
         name: "slack_add_reaction",
         description: "Add a reaction to a Slack message. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(AddReactionSchema),
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     {
         name: "slack_upload_files",
         description: "Upload one or more local files to a channel or thread. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(UploadFilesSchema),
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     {
         name: "slack_edit_message",
         description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text; any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(EditMessageSchema),
-        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
 ];
 

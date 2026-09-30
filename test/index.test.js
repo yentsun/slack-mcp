@@ -1,5 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
     parsePermalink,
     requireString,
@@ -13,18 +18,39 @@ import {
     TOOLS,
 } from "../index.js";
 
-test("every tool declares explicit MCP behavior annotations", () => {
-    const expected = {
-        slack_read_permalink: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-        slack_get_replies: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-        slack_get_history: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-        slack_reply_to_thread: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-        slack_add_reaction: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-        slack_upload_files: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-        slack_edit_message: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-    };
+test("tool definitions omit annotations unsupported by the OpenCode MCP catalog", () => {
+    assert.ok(TOOLS.length > 0);
+    for (const tool of TOOLS) {
+        assert.equal(Object.hasOwn(tool, "annotations"), false, `${tool.name} must not include annotations`);
+    }
+});
 
-    assert.deepEqual(Object.fromEntries(TOOLS.map(({ name, annotations }) => [name, annotations])), expected);
+test("stdio server completes the MCP lifecycle and lists compatible tools", async (t) => {
+    const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "yt-slack-mcp-secrets-"));
+    fs.writeFileSync(path.join(secretsDir, "slack-xoxc.txt"), "xoxc-test");
+    fs.writeFileSync(path.join(secretsDir, "slack-xoxd.txt"), "xoxd-test");
+
+    const transport = new StdioClientTransport({
+        command: process.execPath,
+        args: ["index.js"],
+        cwd: process.cwd(),
+        env: { ...process.env, SLACK_MCP_SECRETS_DIR: secretsDir },
+        stderr: "pipe",
+    });
+    const client = new Client({ name: "yt-slack-mcp-test", version: "1.0.0" });
+
+    t.after(async () => {
+        await transport.close();
+        fs.rmSync(secretsDir, { recursive: true, force: true });
+    });
+
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+
+    assert.equal(tools.length, TOOLS.length);
+    for (const tool of tools) {
+        assert.equal(Object.hasOwn(tool, "annotations"), false, `${tool.name} must not include annotations`);
+    }
 });
 
 test("parsePermalink extracts channel and timestamp", () => {
