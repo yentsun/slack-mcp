@@ -399,6 +399,12 @@ const AddReactionSchema = z.object({
     reaction: z.string().describe("Emoji name without colons."),
 });
 
+const RemoveReactionSchema = z.object({
+    channel_id: z.string(),
+    timestamp: z.string(),
+    reaction: z.string().describe("Emoji name without colons."),
+});
+
 const UploadFilesSchema = z.object({
     channel_id: z.string(),
     file_paths: z.array(z.string().min(1)).min(1).max(10),
@@ -439,6 +445,11 @@ const TOOLS = [
         name: "slack_add_reaction",
         description: "Add a reaction to a Slack message. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(AddReactionSchema),
+    },
+    {
+        name: "slack_remove_reaction",
+        description: "Remove a reaction added by this account from a Slack message. Restricted to allowed channels.",
+        inputSchema: zodToJsonSchema(RemoveReactionSchema),
     },
     {
         name: "slack_upload_files",
@@ -510,6 +521,18 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                     name: requireString(a.reaction, "reaction"),
                 }, "POST");
                 return { content: [{ type: "text", text: "added reaction" }] };
+            }
+
+            case "slack_remove_reaction": {
+                const a = RemoveReactionSchema.parse(args);
+                const channelId = requireString(a.channel_id, "channel_id");
+                assertAllowedWriteChannel(channelId, allowed);
+                await slackApi("reactions.remove", {
+                    channel: channelId,
+                    timestamp: requireString(a.timestamp, "timestamp"),
+                    name: requireString(a.reaction, "reaction"),
+                }, "POST");
+                return { content: [{ type: "text", text: "removed reaction" }] };
             }
 
             case "slack_upload_files": {
@@ -599,7 +622,7 @@ async function main() {
         {
             capabilities: { tools: {} },
             instructions:
-                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels).",
+                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels).",
         }
     );
 
@@ -654,6 +677,7 @@ export {
     GetHistorySchema,
     ReplyToThreadSchema,
     AddReactionSchema,
+    RemoveReactionSchema,
     UploadFilesSchema,
     EditMessageSchema,
 };
