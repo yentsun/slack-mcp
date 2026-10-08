@@ -297,6 +297,41 @@ test("slack_add_reaction rejects disallowed channel", async () => {
     );
 });
 
+test("slack_remove_reaction removes reaction on allowed channel", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params, httpMethod) => {
+                captured = { method, params, httpMethod };
+                return { ok: true };
+            },
+        })
+    );
+    const result = await exec("slack_remove_reaction", {
+        channel_id: "C1",
+        timestamp: "123.456",
+        reaction: "thumbsup",
+    });
+    assert.equal(captured.method, "reactions.remove");
+    assert.equal(captured.httpMethod, "POST");
+    assert.equal(captured.params.name, "thumbsup");
+    assert.match(text(result), /removed reaction/);
+});
+
+test("slack_remove_reaction rejects disallowed channel", async () => {
+    const exec = createExecuteToolCall(deps({ allowedWriteChannels: [] }));
+    await assert.rejects(
+        () =>
+            exec("slack_remove_reaction", {
+                channel_id: "C1",
+                timestamp: "123.456",
+                reaction: "x",
+            }),
+        /writes are not allowed/
+    );
+});
+
 test("slack_upload_files uploads to an allowed thread and returns permalinks", async () => {
     let captured;
     const exec = createExecuteToolCall(

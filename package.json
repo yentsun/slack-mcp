@@ -1,7 +1,7 @@
 {
   "name": "yt-slack-mcp",
-  "version": "0.3.2",
-  "description": "MCP server for Slack — read permalinks, threads, and channel history; reply to threads; add reactions; edit messages.",
+  "version": "0.4.0",
+  "description": "MCP server for Slack — read permalinks, threads, and channel history; reply to threads; add or remove reactions; edit messages.",
   "type": "module",
   "main": "index.js",
   "bin": {
