@@ -14,7 +14,6 @@ import {
     GetHistorySchema,
     ReplyToThreadSchema,
     AddReactionSchema,
-    RemoveReactionSchema,
     EditMessageSchema,
     TOOLS,
 } from "../index.js";
@@ -115,12 +114,6 @@ test("ReplyToThreadSchema requires all fields", () => {
 
 test("AddReactionSchema requires all fields", () => {
     assert.throws(() => AddReactionSchema.parse({}));
-});
-
-test("RemoveReactionSchema requires all fields", () => {
-    assert.throws(() => RemoveReactionSchema.parse({}));
-    const parsed = RemoveReactionSchema.parse({ channel_id: "c", timestamp: "t", reaction: "x" });
-    assert.equal(parsed.reaction, "x");
 });
 
 test("EditMessageSchema requires all fields", () => {

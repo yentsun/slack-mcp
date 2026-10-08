@@ -399,12 +399,6 @@ const AddReactionSchema = z.object({
     reaction: z.string().describe("Emoji name without colons."),
 });
 
-const RemoveReactionSchema = z.object({
-    channel_id: z.string(),
-    timestamp: z.string(),
-    reaction: z.string().describe("Emoji name without colons."),
-});
-
 const UploadFilesSchema = z.object({
     channel_id: z.string(),
     file_paths: z.array(z.string().min(1)).min(1).max(10),
@@ -449,7 +443,7 @@ const TOOLS = [
     {
         name: "slack_remove_reaction",
         description: "Remove a reaction added by this account from a Slack message. Restricted to allowed channels.",
-        inputSchema: zodToJsonSchema(RemoveReactionSchema),
+        inputSchema: zodToJsonSchema(AddReactionSchema),
     },
     {
         name: "slack_upload_files",
@@ -524,7 +518,7 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
             }
 
             case "slack_remove_reaction": {
-                const a = RemoveReactionSchema.parse(args);
+                const a = AddReactionSchema.parse(args);
                 const channelId = requireString(a.channel_id, "channel_id");
                 assertAllowedWriteChannel(channelId, allowed);
                 await slackApi("reactions.remove", {
@@ -677,7 +671,6 @@ export {
     GetHistorySchema,
     ReplyToThreadSchema,
     AddReactionSchema,
-    RemoveReactionSchema,
     UploadFilesSchema,
     EditMessageSchema,
 };
