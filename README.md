@@ -30,7 +30,7 @@ Attachment limits: images and text files are limited to 10 MB; text attachments 
 
 The write tools post through the account's own browser session, so Slack shows
 the account name on them. To keep agent-written messages distinguishable, the
-text of every posted message is prefixed with `🤖:`:
+text of every posted message is prefixed with `🤖:` by default:
 
 ```text
 🤖: deployed revision 4f2c1a9
@@ -46,7 +46,7 @@ can pass `model` with the model it is running; the prefix then names it:
 The prefix is added once: text that already starts with `🤖` is sent unchanged,
 so editing a prefixed message does not stack prefixes. A file upload without an
 `initial_comment` — or with only whitespace — gets no comment rather than a bare
-prefix.
+prefix, and `model` has no effect then.
 
 `slack_edit_message` can also replace a message with text that is not
 agent-written, such as a correction to the user's own message: pass

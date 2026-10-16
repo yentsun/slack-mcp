@@ -480,7 +480,7 @@ const TOOLS = [
     },
     {
         name: "slack_upload_files",
-        description: "Upload one or more local files to a channel or thread. A given initial_comment is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; pass model to name the model writing it. Restricted to allowed channels.",
+        description: "Upload one or more local files to a channel or thread. A given initial_comment is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; pass model to name the model writing it, and note that model has no effect without initial_comment. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(UploadFilesSchema),
     },
     {
