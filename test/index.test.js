@@ -14,6 +14,7 @@ import {
     GetHistorySchema,
     ReplyToThreadSchema,
     AddReactionSchema,
+    UploadFilesSchema,
     EditMessageSchema,
     TOOLS,
 } from "../index.js";
@@ -120,4 +121,22 @@ test("EditMessageSchema requires all fields", () => {
     assert.throws(() => EditMessageSchema.parse({}));
     const parsed = EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x" });
     assert.equal(parsed.text, "x");
+});
+
+test("write schemas accept an optional model name in the robot prefix", () => {
+    assert.equal(ReplyToThreadSchema.parse({ channel_id: "c", thread_ts: "t", text: "x" }).model, undefined);
+    assert.equal(
+        ReplyToThreadSchema.parse({ channel_id: "c", thread_ts: "t", text: "x", model: "gpt-5.1" }).model,
+        "gpt-5.1"
+    );
+    assert.equal(UploadFilesSchema.parse({ channel_id: "c", file_paths: ["a"] }).model, undefined);
+    assert.equal(EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x" }).model, undefined);
+});
+
+test("EditMessageSchema treats text as agent-written unless it is told otherwise", () => {
+    assert.equal(EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x" }).agent_authored, true);
+    assert.equal(
+        EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x", agent_authored: false }).agent_authored,
+        false
+    );
 });
