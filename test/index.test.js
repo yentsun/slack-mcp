@@ -132,3 +132,11 @@ test("write schemas accept an optional model name in the robot prefix", () => {
     assert.equal(UploadFilesSchema.parse({ channel_id: "c", file_paths: ["a"] }).model, undefined);
     assert.equal(EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x" }).model, undefined);
 });
+
+test("EditMessageSchema treats text as agent-written unless it is told otherwise", () => {
+    assert.equal(EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x" }).agent_authored, true);
+    assert.equal(
+        EditMessageSchema.parse({ channel_id: "c", timestamp: "t", text: "x", agent_authored: false }).agent_authored,
+        false
+    );
+});

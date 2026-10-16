@@ -251,8 +251,11 @@ test("slack_reply_to_thread posts when channel allowed", async () => {
 
 test("withAgentPrefix marks agent text once and keeps an existing prefix", () => {
     assert.equal(withAgentPrefix("hello", undefined), "🤖: hello");
+    assert.equal(withAgentPrefix("  hello  ", undefined), "🤖: hello");
     assert.equal(withAgentPrefix("hello", "  gpt-5.1  "), "🤖 gpt-5.1: hello");
     assert.equal(withAgentPrefix("🤖: already marked", "gpt-5.1"), "🤖: already marked");
+    assert.equal(withAgentPrefix("  🤖: already marked  ", "gpt-5.1"), "🤖: already marked");
+    assert.equal(withAgentPrefix("   ", "gpt-5.1"), undefined);
     assert.equal(withAgentPrefix(undefined, "gpt-5.1"), undefined);
 });
 
@@ -411,6 +414,27 @@ test("slack_upload_files sends no comment when the upload has none", async () =>
     assert.equal(captured.initialComment, undefined);
 });
 
+test("slack_upload_files treats a blank comment as no comment", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            uploadSlackFiles: async (args) => {
+                captured = args;
+                return [];
+            },
+        })
+    );
+
+    await exec("slack_upload_files", {
+        channel_id: "C1",
+        file_paths: ["C:/tmp/contract.md"],
+        initial_comment: "   ",
+    });
+
+    assert.equal(captured.initialComment, undefined);
+});
+
 test("slack_upload_files rejects disallowed channels", async () => {
     const exec = createExecuteToolCall(deps({ allowedWriteChannels: ["C1"] }));
     await assert.rejects(
@@ -501,6 +525,32 @@ test("slack_edit_message does not stack the robot emoji prefix", async () => {
     });
 
     assert.equal(captured.text, "🤖 claude-sonnet-4-5: corrected deployment status");
+});
+
+test("slack_edit_message stores unmarked text when the edit is not agent-written", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params) => {
+                if (method === "chat.update") {
+                    captured = params;
+                    return { ok: true, ts: params.ts };
+                }
+                return { ok: true };
+            },
+        })
+    );
+
+    await exec("slack_edit_message", {
+        channel_id: "C1",
+        timestamp: "123.456",
+        text: "typo fixed",
+        agent_authored: false,
+        model: "claude-sonnet-4-5",
+    });
+
+    assert.equal(captured.text, "typo fixed");
 });
 
 test("slack_edit_message rejects disallowed channels", async () => {

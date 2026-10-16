@@ -374,14 +374,20 @@ const AGENT_PREFIX_EMOJI = "🤖";
 
 // Slack shows the account's own name on everything this server posts, so mark
 // agent-written text with a robot emoji and name the model that wrote it when
-// the caller says which one it is running. Text that already carries the prefix
-// is returned unchanged, so editing a prefixed message does not stack prefixes.
+// the caller says which one it is running. Text is trimmed and blank text has no
+// prefix to carry, so an optional comment stays absent. Text that already
+// carries the prefix is returned unchanged, so editing a prefixed message does
+// not stack prefixes.
 function withAgentPrefix(text, model) {
-    if (!text || text.startsWith(AGENT_PREFIX_EMOJI)) {
-        return text;
+    const value = typeof text === "string" ? text.trim() : "";
+    if (!value) {
+        return undefined;
+    }
+    if (value.startsWith(AGENT_PREFIX_EMOJI)) {
+        return value;
     }
     const name = typeof model === "string" ? model.trim() : "";
-    return `${AGENT_PREFIX_EMOJI}${name ? ` ${name}` : ""}: ${text}`;
+    return `${AGENT_PREFIX_EMOJI}${name ? ` ${name}` : ""}: ${value}`;
 }
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
@@ -431,6 +437,11 @@ const EditMessageSchema = z.object({
     channel_id: z.string(),
     timestamp: z.string().describe("Timestamp of the message or thread reply to edit."),
     text: z.string(),
+    agent_authored: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe("Set false when this text is not agent-written, for example correcting the user's own message, so it is stored without the 🤖 prefix."),
     model: AgentModelField,
 });
 
@@ -474,7 +485,7 @@ const TOOLS = [
     },
     {
         name: "slack_edit_message",
-        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text, prefixed with `🤖:` — or `🤖 <model>:` when model is given — unless it already carries the prefix; pass model to name the model writing it. Any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
+        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text, prefixed with `🤖:` — or `🤖 <model>:` when model is given — unless it already carries the prefix; pass model to name the model writing it, and set agent_authored to false when the new text is not agent-written. Any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(EditMessageSchema),
     },
 ];
@@ -574,13 +585,13 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                 const channelId = requireString(a.channel_id, "channel_id");
                 assertAllowedWriteChannel(channelId, allowed);
                 const timestamp = requireString(a.timestamp, "timestamp");
-                const text = withAgentPrefix(requireString(a.text, "text"), a.model);
+                const text = requireString(a.text, "text");
                 let updated;
                 try {
                     updated = await slackApi("chat.update", {
                         channel: channelId,
                         ts: timestamp,
-                        text,
+                        text: a.agent_authored ? withAgentPrefix(text, a.model) : text,
                     }, "POST");
                 } catch (error) {
                     const reason = String(error?.message ?? error).replace(/^slack chat\.update failed: /, "");
