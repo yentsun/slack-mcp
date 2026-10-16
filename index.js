@@ -441,7 +441,7 @@ const EditMessageSchema = z.object({
         .boolean()
         .optional()
         .default(true)
-        .describe("Set false when this text is not agent-written, for example correcting the user's own message, so it is stored without the 🤖 prefix."),
+        .describe("Set false when this text is not agent-written, for example correcting the user's own message, so it is stored without the 🤖 prefix; model is ignored when this is false."),
     model: AgentModelField,
 });
 
@@ -649,7 +649,7 @@ async function main() {
         {
             capabilities: { tools: {} },
             instructions:
-                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels). Messages sent by the write tools are prefixed with `🤖:`; pass model with the model you are running to include it in the prefix.",
+                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels). Messages sent by the write tools are prefixed with `🤖:` by default, and slack_edit_message can opt out with agent_authored false; pass model with the model you are running to include it in the prefix.",
         }
     );
 

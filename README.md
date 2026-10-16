@@ -9,7 +9,7 @@ A host-agnostic [Model Context Protocol](https://modelcontextprotocol.io) server
 - Return image attachments inline, extract text from PDFs, and return `text/*` attachment contents inline.
 - Retrieve private attachment contents through the authenticated Slack browser session.
 - Reply to a thread, add or remove a reaction, edit an authored message or thread reply, or upload local files only in explicitly allowed channel IDs.
-- Prefix every message the agent posts with `🤖:` — or `🤖 <model>:` when the call names the model — so agent replies stand apart from the account's own messages.
+- Prefix every message the agent posts with `🤖:` — or `🤖 <model>:` when the call names the model — so agent replies stand apart from the account's own messages; an edit can opt out with `agent_authored: false`.
 
 Attachment limits: images and text files are limited to 10 MB; text attachments are truncated at 100,000 characters. PDFs are limited to 20 MB, 50 pages, and 100,000 extracted characters.
 
@@ -51,6 +51,7 @@ prefix.
 `slack_edit_message` can also replace a message with text that is not
 agent-written, such as a correction to the user's own message: pass
 `agent_authored: false` and the text is stored as given, without the prefix.
+`model` has no effect when `agent_authored` is `false`.
 
 ## Setup
 
