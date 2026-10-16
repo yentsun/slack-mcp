@@ -23,7 +23,7 @@ Attachment limits: images and text files are limited to 10 MB; text attachments 
 | `slack_reply_to_thread` | Reply to a thread, with optional `model`, in a `🤖:`-prefixed message; restricted to allowed channels. |
 | `slack_add_reaction` | Add a reaction; restricted to allowed channels. |
 | `slack_remove_reaction` | Remove a reaction added by this account; restricted to allowed channels. |
-| `slack_upload_files` | Upload up to 10 local files to a channel or thread, with an optional `initial_comment` prefixed with `🤖:` and an optional `model`; returns file and message permalinks; restricted to allowed channels. |
+| `slack_upload_files` | Upload up to 10 local files to a channel or thread, with an optional `initial_comment` prefixed with `🤖:` and an optional `model` (only used with a comment); returns file and message permalinks; restricted to allowed channels. |
 | `slack_edit_message` | Edit an authored message or thread reply by channel ID and timestamp; replaces the message text with `🤖:`-prefixed text and an optional `model`, or with the text as given when `agent_authored` is `false` (Slack removes any existing Block Kit blocks) and returns the updated timestamp and permalink; restricted to allowed channels. |
 
 ## Agent message prefix
