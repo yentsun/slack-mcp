@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createExecuteToolCall, createSlackClient } from "../index.js";
+import { createExecuteToolCall, createSlackClient, withAgentPrefix } from "../index.js";
 
 function deps(overrides = {}) {
     const d = {
@@ -245,8 +245,35 @@ test("slack_reply_to_thread posts when channel allowed", async () => {
     assert.equal(captured.method, "chat.postMessage");
     assert.equal(captured.httpMethod, "POST");
     assert.equal(captured.params.channel, "C1");
-    assert.equal(captured.params.text, "thanks");
+    assert.equal(captured.params.text, "🤖: thanks");
     assert.match(text(result), /posted reply at 111\.222/);
+});
+
+test("withAgentPrefix marks agent text once and keeps an existing prefix", () => {
+    assert.equal(withAgentPrefix("hello", undefined), "🤖: hello");
+    assert.equal(withAgentPrefix("hello", "  gpt-5.1  "), "🤖 gpt-5.1: hello");
+    assert.equal(withAgentPrefix("🤖: already marked", "gpt-5.1"), "🤖: already marked");
+    assert.equal(withAgentPrefix(undefined, "gpt-5.1"), undefined);
+});
+
+test("slack_reply_to_thread names the calling model in the prefix", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params) => {
+                captured = { method, params };
+                return { ok: true, ts: "111.222" };
+            },
+        })
+    );
+    await exec("slack_reply_to_thread", {
+        channel_id: "C1",
+        thread_ts: "123.456",
+        text: "thanks",
+        model: "claude-sonnet-4-5",
+    });
+    assert.equal(captured.params.text, "🤖 claude-sonnet-4-5: thanks");
 });
 
 test("slack_reply_to_thread rejects disallowed channel", async () => {
@@ -360,11 +387,28 @@ test("slack_upload_files uploads to an allowed thread and returns permalinks", a
         channelId: "C1",
         filePaths: ["C:/tmp/contract.md"],
         threadTs: "123.456",
-        initialComment: "Here is the contract.",
+        initialComment: "🤖: Here is the contract.",
     });
     assert.match(text(result), /uploaded file: contract\.md/);
     assert.match(text(result), /file permalink: https:\/\/example\.slack\.com\/files\/U1\/F1/);
     assert.match(text(result), /https:\/\/example\.slack\.com\/archives\/C1\/p1234567890123456/);
+});
+
+test("slack_upload_files sends no comment when the upload has none", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            uploadSlackFiles: async (args) => {
+                captured = args;
+                return [];
+            },
+        })
+    );
+
+    await exec("slack_upload_files", { channel_id: "C1", file_paths: ["C:/tmp/contract.md"] });
+
+    assert.equal(captured.initialComment, undefined);
 });
 
 test("slack_upload_files rejects disallowed channels", async () => {
@@ -398,7 +442,7 @@ test("slack_edit_message updates an allowed message and returns the permalink", 
 
     assert.deepEqual(calls[0], {
         method: "chat.update",
-        params: { channel: "C1", ts: "123.456", text: "updated text" },
+        params: { channel: "C1", ts: "123.456", text: "🤖: updated text" },
         httpMethod: "POST",
     });
     assert.equal(calls[1].method, "chat.getPermalink");
@@ -431,7 +475,32 @@ test("slack_edit_message edits a thread reply by its timestamp", async () => {
 
     assert.equal(captured.channel, "C1");
     assert.equal(captured.ts, "1784549814.834729");
-    assert.equal(captured.text, "corrected deployment status");
+    assert.equal(captured.text, "🤖: corrected deployment status");
+});
+
+test("slack_edit_message does not stack the robot emoji prefix", async () => {
+    let captured;
+    const exec = createExecuteToolCall(
+        deps({
+            allowedWriteChannels: ["C1"],
+            slackApi: async (method, params) => {
+                if (method === "chat.update") {
+                    captured = params;
+                    return { ok: true, ts: params.ts };
+                }
+                return { ok: true };
+            },
+        })
+    );
+
+    await exec("slack_edit_message", {
+        channel_id: "C1",
+        timestamp: "123.456",
+        text: "🤖 claude-sonnet-4-5: corrected deployment status",
+        model: "gpt-5.1",
+    });
+
+    assert.equal(captured.text, "🤖 claude-sonnet-4-5: corrected deployment status");
 });
 
 test("slack_edit_message rejects disallowed channels", async () => {

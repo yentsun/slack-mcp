@@ -370,7 +370,26 @@ function assertAllowedWriteChannel(channelId, allowed) {
     }
 }
 
+const AGENT_PREFIX_EMOJI = "🤖";
+
+// Slack shows the account's own name on everything this server posts, so mark
+// agent-written text with a robot emoji and name the model that wrote it when
+// the caller says which one it is running. Text that already carries the prefix
+// is returned unchanged, so editing a prefixed message does not stack prefixes.
+function withAgentPrefix(text, model) {
+    if (!text || text.startsWith(AGENT_PREFIX_EMOJI)) {
+        return text;
+    }
+    const name = typeof model === "string" ? model.trim() : "";
+    return `${AGENT_PREFIX_EMOJI}${name ? ` ${name}` : ""}: ${text}`;
+}
+
 // ── Schemas ─────────────────────────────────────────────────────────────────
+
+const AgentModelField = z
+    .string()
+    .optional()
+    .describe("Model you are running, e.g. gpt-5.1, shown in the 🤖 prefix. Omit when unknown.");
 
 const ReadPermalinkSchema = z.object({
     url: z.string().describe("Slack permalink, e.g. https://<workspace>.slack.com/archives/C.../p..."),
@@ -391,6 +410,7 @@ const ReplyToThreadSchema = z.object({
     channel_id: z.string(),
     thread_ts: z.string(),
     text: z.string(),
+    model: AgentModelField,
 });
 
 const AddReactionSchema = z.object({
@@ -404,12 +424,14 @@ const UploadFilesSchema = z.object({
     file_paths: z.array(z.string().min(1)).min(1).max(10),
     thread_ts: z.string().optional(),
     initial_comment: z.string().optional(),
+    model: AgentModelField,
 });
 
 const EditMessageSchema = z.object({
     channel_id: z.string(),
     timestamp: z.string().describe("Timestamp of the message or thread reply to edit."),
     text: z.string(),
+    model: AgentModelField,
 });
 
 // ── Tool definitions ─────────────────────────────────────────────────────────
@@ -432,7 +454,7 @@ const TOOLS = [
     },
     {
         name: "slack_reply_to_thread",
-        description: "Reply to a Slack thread. Restricted to allowed channels.",
+        description: "Reply to a Slack thread. The posted text is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; pass model to name the model writing it. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(ReplyToThreadSchema),
     },
     {
@@ -447,12 +469,12 @@ const TOOLS = [
     },
     {
         name: "slack_upload_files",
-        description: "Upload one or more local files to a channel or thread. Restricted to allowed channels.",
+        description: "Upload one or more local files to a channel or thread. A given initial_comment is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; pass model to name the model writing it. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(UploadFilesSchema),
     },
     {
         name: "slack_edit_message",
-        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text; any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
+        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text, prefixed with `🤖:` — or `🤖 <model>:` when model is given — unless it already carries the prefix; pass model to name the model writing it. Any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(EditMessageSchema),
     },
 ];
@@ -500,7 +522,7 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                 const response = await slackApi("chat.postMessage", {
                     channel: channelId,
                     thread_ts: requireString(a.thread_ts, "thread_ts"),
-                    text: requireString(a.text, "text"),
+                    text: withAgentPrefix(requireString(a.text, "text"), a.model),
                 }, "POST");
                 return { content: [{ type: "text", text: `posted reply at ${response.ts}` }] };
             }
@@ -537,7 +559,7 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                     filePaths: a.file_paths,
                     channelId,
                     threadTs: a.thread_ts && requireString(a.thread_ts, "thread_ts"),
-                    initialComment: a.initial_comment,
+                    initialComment: withAgentPrefix(a.initial_comment, a.model),
                 });
                 return {
                     content: files.map((file) => ({
@@ -552,7 +574,7 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                 const channelId = requireString(a.channel_id, "channel_id");
                 assertAllowedWriteChannel(channelId, allowed);
                 const timestamp = requireString(a.timestamp, "timestamp");
-                const text = requireString(a.text, "text");
+                const text = withAgentPrefix(requireString(a.text, "text"), a.model);
                 let updated;
                 try {
                     updated = await slackApi("chat.update", {
@@ -616,7 +638,7 @@ async function main() {
         {
             capabilities: { tools: {} },
             instructions:
-                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels).",
+                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels). Messages sent by the write tools are prefixed with `🤖:`; pass model with the model you are running to include it in the prefix.",
         }
     );
 
@@ -661,6 +683,7 @@ export {
     parsePermalink,
     requireString,
     assertAllowedWriteChannel,
+    withAgentPrefix,
     createExecuteToolCall,
     createSlackClient,
     loadConfig,
