@@ -128,6 +128,17 @@ For example, Claude Desktop uses:
 }
 ```
 
+## Install as a skill
+
+[`skills/slack-mcp/SKILL.md`](skills/slack-mcp/SKILL.md) packages this server as
+an Agent Skill so an agent knows when to read Slack, when a write is allowed,
+and which tool fits the request. Copy or symlink the `skills/slack-mcp`
+directory into your agent's skills directory (for example
+`.agents/skills/slack-mcp`); the server still needs the setup above.
+
+The skill is also prepared for the Agensi marketplace; the listing copy lives in
+[`skills/slack-mcp/LISTING.md`](skills/slack-mcp/LISTING.md).
+
 ## License
 
 MIT

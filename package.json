@@ -11,7 +11,8 @@
     "test": "node --test --experimental-test-coverage"
   },
   "files": [
-    "index.js"
+    "index.js",
+    "skills"
   ],
   "keywords": [
     "mcp",
