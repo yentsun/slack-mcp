@@ -19,21 +19,20 @@ token.
    `~/.config/yt-slack-mcp/secrets/slack-xoxc.txt`.
 2. Save the `xoxd` token (the cookie named `d`) as a single line in
    `~/.config/yt-slack-mcp/secrets/slack-xoxd.txt`.
-3. Allow writes by listing channel IDs in
-   `SLACK_MCP_ALLOWED_WRITE_CHANNELS` (comma-separated) or
-   `allowedWriteChannels` in `~/.config/yt-slack-mcp/config.json`. With neither
-   set, every write is refused.
+3. Allow writes by listing channel IDs in `allowedWriteChannels` in
+   `~/.config/yt-slack-mcp/config.json`. With an empty or missing list, every
+   write is refused.
 
-`SLACK_MCP_CONFIG`, `SLACK_MCP_SECRETS_DIR`, `SLACK_MCP_XOXC_PATH`, and
-`SLACK_MCP_XOXD_PATH` override the default paths. Never echo a token or a file's
-contents back to the user.
+Configuration is file-based: `config.json` also accepts `secretsDir`, `xoxcPath`,
+`xoxdPath`, and `userAgent`, and the defaults apply when a key is absent. Never
+echo a token or a file's contents back to the user.
 
 ### What each failure means
 
 | Message | Cause | Fix |
 |---------|-------|-----|
-| `Error: missing slack-xoxc.txt (looked at <path>)` | The `xoxc` file is absent at startup; the server exits before listing tools. | Write the token file at the reported path, or point `SLACK_MCP_XOXC_PATH` at it. |
-| `Error: missing slack-xoxd.txt (looked at <path>)` | Same, for the `xoxd` file. | Write the token file at the reported path, or point `SLACK_MCP_XOXD_PATH` at it. |
+| `Error: missing slack-xoxc.txt (looked at <path>)` | The `xoxc` file is absent at startup; the server exits before listing tools. | Write the token file at the reported path, or set `xoxcPath` in `config.json` to point at it. |
+| `Error: missing slack-xoxd.txt (looked at <path>)` | Same, for the `xoxd` file. | Write the token file at the reported path, or set `xoxdPath` in `config.json` to point at it. |
 | `Error: invalid Slack MCP config <path>: <detail>` | `config.json` is not valid JSON. | Fix the JSON or remove the file. |
 | `Error: writes are not allowed for channel <id>` | The channel is not in the allow-list. | Add the channel ID to the allow-list if the user wants writes there; never work around the refusal. |
 | `slack <method> failed: invalid_auth` (or `not_authed`) | The browser session expired or the token was copied incorrectly. | Refresh the `xoxc`/`xoxd` pair, then retry once. |
