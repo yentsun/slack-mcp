@@ -41,6 +41,22 @@ echo a token or a file's contents back to the user.
 Tool errors arrive as text starting with `Error:`. Report the text instead of
 retrying the same call unchanged.
 
+## Troubleshooting
+
+- **Writes refused or tokens missing after an upgrade.** Configuration is
+  file-based only: values supplied through environment variables are ignored.
+  Move `secretsDir`, `xoxcPath`, `xoxdPath`, and `allowedWriteChannels` into
+  `~/.config/yt-slack-mcp/config.json`.
+- **Only some expected channels are writable.** `allowedWriteChannels` is the
+  complete list with no additive default; compare it with the channel IDs the
+  user expects.
+- **The server exits at startup.** The reported token path must exist and hold a
+  non-empty single-line token. A stale browser session surfaces later as
+  `invalid_auth`, not as a startup error.
+- **A write still fails inside an allowed channel.** The browser session may have
+  lost write access or the message may be outside the edit window; report the
+  exact `Error:` text instead of retrying.
+
 ## Tool map
 
 Choose the read tool from what the user gave you, and the write tool from the
