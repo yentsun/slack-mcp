@@ -42,18 +42,7 @@ function expandHome(filePath) {
     return filePath;
 }
 
-function parseChannelList(value) {
-    if (value === undefined || value === null || value === "") {
-        return null;
-    }
-    return value
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean);
-}
-
-function loadConfig(env = process.env) {
-    const configPath = env.SLACK_MCP_CONFIG || DEFAULT_CONFIG_PATH;
+function loadConfig(configPath = DEFAULT_CONFIG_PATH) {
     let fileConfig = {};
     if (fs.existsSync(configPath)) {
         try {
@@ -63,15 +52,11 @@ function loadConfig(env = process.env) {
         }
     }
 
-    const secretsDir =
-        env.SLACK_MCP_SECRETS_DIR || expandHome(fileConfig.secretsDir) || DEFAULT_SECRETS_DIR;
-    const xoxcPath =
-        env.SLACK_MCP_XOXC_PATH || expandHome(fileConfig.xoxcPath) || path.join(secretsDir, "slack-xoxc.txt");
-    const xoxdPath =
-        env.SLACK_MCP_XOXD_PATH || expandHome(fileConfig.xoxdPath) || path.join(secretsDir, "slack-xoxd.txt");
-    const allowedWriteChannels =
-        parseChannelList(env.SLACK_MCP_ALLOWED_WRITE_CHANNELS) ?? fileConfig.allowedWriteChannels ?? [];
-    const userAgent = env.SLACK_MCP_USER_AGENT || fileConfig.userAgent || "Mozilla/5.0";
+    const secretsDir = expandHome(fileConfig.secretsDir) || DEFAULT_SECRETS_DIR;
+    const xoxcPath = expandHome(fileConfig.xoxcPath) || path.join(secretsDir, "slack-xoxc.txt");
+    const xoxdPath = expandHome(fileConfig.xoxdPath) || path.join(secretsDir, "slack-xoxd.txt");
+    const allowedWriteChannels = fileConfig.allowedWriteChannels ?? [];
+    const userAgent = fileConfig.userAgent || "Mozilla/5.0";
 
     return { configPath, secretsDir, xoxcPath, xoxdPath, allowedWriteChannels, userAgent };
 }
@@ -699,7 +684,6 @@ export {
     createSlackClient,
     loadConfig,
     expandHome,
-    parseChannelList,
     ReadPermalinkSchema,
     GetRepliesSchema,
     GetHistorySchema,

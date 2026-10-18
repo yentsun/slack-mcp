@@ -71,12 +71,12 @@ Save each token as a single-line file:
 ~/.config/yt-slack-mcp/secrets/slack-xoxd.txt
 ```
 
-The server reads these paths by default. Override them with the config file or environment variables if your MCP host manages secrets elsewhere.
+The server reads these paths by default. Override them in the config file described below if your MCP host manages secrets elsewhere.
 
 ### 3. (Optional) Configure allowed write channels and paths
 
-All configuration can live in a JSON config file at
-`~/.config/yt-slack-mcp/config.json` (override with `SLACK_MCP_CONFIG`):
+All configuration lives in a JSON config file at
+`~/.config/yt-slack-mcp/config.json`:
 
 ```json
 {
@@ -91,21 +91,20 @@ All configuration can live in a JSON config file at
 By default the write tools (`slack_reply_to_thread`, `slack_add_reaction`,
 `slack_remove_reaction`, `slack_edit_message`) and `slack_upload_files` are
 locked down — no channel is writable. Each upload is limited to 10 MB. Every
-field is optional; a missing file just means defaults. Env vars always override
-the config file.
+field is optional; a missing file just means defaults.
 
 ## Configuration
 
-Config resolution order: built-in defaults → config file → env vars.
+Configuration comes from the JSON config file, with built-in defaults for
+absent keys.
 
-| Config file key | Env var | Default | Description |
-|-----------------|---------|---------|-------------|
-| `secretsDir` | `SLACK_MCP_SECRETS_DIR` | `~/.config/yt-slack-mcp/secrets` | Directory holding the token files |
-| `xoxcPath` | `SLACK_MCP_XOXC_PATH` | `$SECRETS_DIR/slack-xoxc.txt` | Path to the `xoxc` token |
-| `xoxdPath` | `SLACK_MCP_XOXD_PATH` | `$SECRETS_DIR/slack-xoxd.txt` | Path to the `xoxd` token |
-| `allowedWriteChannels` | `SLACK_MCP_ALLOWED_WRITE_CHANNELS` | *(none)* | Channel IDs allowed for write tools (comma-separated in env) |
-| `userAgent` | `SLACK_MCP_USER_AGENT` | `Mozilla/5.0` | HTTP `User-Agent` header |
-| *(config file path)* | `SLACK_MCP_CONFIG` | `~/.config/yt-slack-mcp/config.json` | Path to the JSON config file |
+| Config key | Default | Description |
+|------------|---------|-------------|
+| `secretsDir` | `~/.config/yt-slack-mcp/secrets` | Directory holding the token files |
+| `xoxcPath` | `$SECRETS_DIR/slack-xoxc.txt` | Path to the `xoxc` token |
+| `xoxdPath` | `$SECRETS_DIR/slack-xoxd.txt` | Path to the `xoxd` token |
+| `allowedWriteChannels` | *(none)* | Channel IDs allowed for write tools |
+| `userAgent` | `Mozilla/5.0` | HTTP `User-Agent` header |
 
 ## MCP host configuration
 

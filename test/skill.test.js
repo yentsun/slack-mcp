@@ -38,3 +38,8 @@ test("README links the skill and the listing draft", () => {
     assert.match(readme, /skills\/slack-mcp\/LISTING\.md/);
     assert.ok(listing.includes("Trigger example"));
 });
+
+test("skill and README document file-based config only", () => {
+    assert.doesNotMatch(skill, /SLACK_MCP_[A-Z_]+/);
+    assert.doesNotMatch(readme, /SLACK_MCP_[A-Z_]+|environment variables/);
+});
