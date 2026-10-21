@@ -45,8 +45,8 @@ retrying the same call unchanged.
 
 - **Writes refused or tokens missing after an upgrade.** Configuration is
   file-based only: values supplied through environment variables are ignored.
-  Move `secretsDir`, `xoxcPath`, `xoxdPath`, and `allowedWriteChannels` into
-  `~/.config/yt-slack-mcp/config.json`.
+  Move `secretsDir`, `xoxcPath`, `xoxdPath`, `allowedWriteChannels`, and
+  `userAgent` into `~/.config/yt-slack-mcp/config.json`.
 - **Only some expected channels are writable.** `allowedWriteChannels` is the
   complete list with no additive default; compare it with the channel IDs the
   user expects.

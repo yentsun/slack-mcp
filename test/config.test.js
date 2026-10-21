@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig, expandHome, parseChannelList } from "../index.js";
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("expandHome expands ~ and leaves absolute paths alone", () => {
     assert.equal(expandHome("~"), os.homedir());
@@ -72,6 +76,7 @@ test("loadConfig rejects non-string channel IDs", () => {
 
 test("loadConfig ignores environment variables", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slack-mcp-config-"));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "slack-mcp-home-"));
     const configPath = path.join(dir, "config.json");
     const envConfigPath = path.join(dir, "env-config.json");
     fs.writeFileSync(configPath, JSON.stringify({ allowedWriteChannels: ["C1"] }));
@@ -88,17 +93,28 @@ test("loadConfig ignores environment variables", () => {
         const config = loadConfig(configPath);
         assert.deepEqual(config.allowedWriteChannels, ["C1"]);
         assert.equal(config.secretsDir, path.join(os.homedir(), ".config", "yt-slack-mcp", "secrets"));
-        const defaultConfig = loadConfig();
-        assert.equal(
-            defaultConfig.configPath,
-            path.join(os.homedir(), ".config", "yt-slack-mcp", "config.json")
+        const output = execFileSync(
+            process.execPath,
+            [
+                "--input-type=module",
+                "-e",
+                'const { loadConfig } = await import("./index.js"); console.log(JSON.stringify(loadConfig()));',
+            ],
+            {
+                cwd: root,
+                env: { ...process.env, HOME: home, USERPROFILE: home },
+                encoding: "utf8",
+            }
         );
-        assert.notEqual(defaultConfig.configPath, envConfigPath);
+        const defaultConfig = JSON.parse(output);
+        assert.equal(defaultConfig.configPath, path.join(home, ".config", "yt-slack-mcp", "config.json"));
+        assert.deepEqual(defaultConfig.allowedWriteChannels, []);
     } finally {
         for (const [key, value] of Object.entries(previous)) {
             if (value === undefined) delete process.env[key];
             else process.env[key] = value;
         }
+        fs.rmSync(home, { recursive: true, force: true });
     }
 });
 
