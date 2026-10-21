@@ -33,7 +33,7 @@ echo a token or a file's contents back to the user.
 |---------|-------|-----|
 | `Error: missing slack-xoxc.txt (looked at <path>)` | The `xoxc` file is absent at startup; the server exits before listing tools. | Write the token file at the reported path, or set `xoxcPath` in `config.json` to point at it. |
 | `Error: missing slack-xoxd.txt (looked at <path>)` | Same, for the `xoxd` file. | Write the token file at the reported path, or set `xoxdPath` in `config.json` to point at it. |
-| `Error: invalid Slack MCP config <path>: <detail>` | `config.json` is not valid JSON. | Fix the JSON or remove the file. |
+| `Error: invalid Slack MCP config <path>: <detail>` | `config.json` is not valid JSON, or a value has the wrong type; the detail names the problem. | Fix the JSON, correct the value, or remove the file. |
 | `Error: writes are not allowed for channel <id>` | The channel is not in the allow-list. | Add the channel ID to the allow-list if the user wants writes there; never work around the refusal. |
 | `slack <method> failed: invalid_auth` (or `not_authed`) | The browser session expired or the token was copied incorrectly. | Refresh the `xoxc`/`xoxd` pair, then retry once. |
 | `Error: missing <name>` | A required argument (`channel_id`, `thread_ts`, `timestamp`, `text`, `reaction`) was blank. | Supply the actual value; do not invent IDs. |
@@ -50,9 +50,9 @@ retrying the same call unchanged.
 - **Only some expected channels are writable.** `allowedWriteChannels` is the
   complete list with no additive default; compare it with the channel IDs the
   user expects.
-- **The server exits at startup.** The reported token path must exist and hold a
-  non-empty single-line token. A stale browser session surfaces later as
-  `invalid_auth`, not as a startup error.
+- **The server exits at startup.** A reported token path is missing; create the
+  file at that path. An empty or stale token does not stop startup; the first
+  Slack call fails later as `invalid_auth`.
 - **A write still fails inside an allowed channel.** The browser session may have
   lost write access or the message may be outside the edit window; report the
   exact `Error:` text instead of retrying.

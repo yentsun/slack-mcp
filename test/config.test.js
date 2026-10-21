@@ -73,13 +73,17 @@ test("loadConfig rejects non-string channel IDs", () => {
 test("loadConfig ignores environment variables", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slack-mcp-config-"));
     const configPath = path.join(dir, "config.json");
+    const envConfigPath = path.join(dir, "env-config.json");
     fs.writeFileSync(configPath, JSON.stringify({ allowedWriteChannels: ["C1"] }));
+    fs.writeFileSync(envConfigPath, JSON.stringify({ allowedWriteChannels: ["C9"] }));
     const previous = {
         SLACK_MCP_ALLOWED_WRITE_CHANNELS: process.env.SLACK_MCP_ALLOWED_WRITE_CHANNELS,
         SLACK_MCP_SECRETS_DIR: process.env.SLACK_MCP_SECRETS_DIR,
+        SLACK_MCP_CONFIG: process.env.SLACK_MCP_CONFIG,
     };
     process.env.SLACK_MCP_ALLOWED_WRITE_CHANNELS = "C9";
     process.env.SLACK_MCP_SECRETS_DIR = path.join(dir, "env-secrets");
+    process.env.SLACK_MCP_CONFIG = envConfigPath;
     try {
         const config = loadConfig(configPath);
         assert.deepEqual(config.allowedWriteChannels, ["C1"]);

@@ -19,6 +19,8 @@ import {
     TOOLS,
 } from "../index.js";
 
+const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+
 test("tool definitions omit annotations unsupported by the OpenCode MCP catalog", () => {
     assert.ok(TOOLS.length > 0);
     for (const tool of TOOLS) {
@@ -48,6 +50,9 @@ test("stdio server completes the MCP lifecycle and lists compatible tools", asyn
     });
 
     await client.connect(transport);
+    const serverVersion = client.getServerVersion();
+    assert.equal(serverVersion?.name, "yt-slack-mcp");
+    assert.equal(serverVersion?.version, pkg.version);
     const { tools } = await client.listTools();
 
     assert.equal(tools.length, TOOLS.length);
