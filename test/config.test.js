@@ -88,6 +88,12 @@ test("loadConfig ignores environment variables", () => {
         const config = loadConfig(configPath);
         assert.deepEqual(config.allowedWriteChannels, ["C1"]);
         assert.equal(config.secretsDir, path.join(os.homedir(), ".config", "yt-slack-mcp", "secrets"));
+        const defaultConfig = loadConfig();
+        assert.equal(
+            defaultConfig.configPath,
+            path.join(os.homedir(), ".config", "yt-slack-mcp", "config.json")
+        );
+        assert.notEqual(defaultConfig.configPath, envConfigPath);
     } finally {
         for (const [key, value] of Object.entries(previous)) {
             if (value === undefined) delete process.env[key];

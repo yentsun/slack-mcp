@@ -36,7 +36,7 @@ echo a token or a file's contents back to the user.
 | `Error: invalid Slack MCP config <path>: <detail>` | `config.json` is not valid JSON, or a value has the wrong type; the detail names the problem. | Fix the JSON, correct the value, or remove the file. |
 | `Error: writes are not allowed for channel <id>` | The channel is not in the allow-list. | Add the channel ID to the allow-list if the user wants writes there; never work around the refusal. |
 | `slack <method> failed: invalid_auth` (or `not_authed`) | The browser session expired or the token was copied incorrectly. | Refresh the `xoxc`/`xoxd` pair, then retry once. |
-| `Error: missing <name>` | A required argument (`channel_id`, `thread_ts`, `timestamp`, `text`, `reaction`) was blank. | Supply the actual value; do not invent IDs. |
+| `Error: missing <name>` | A required write-tool argument (`channel_id`, `thread_ts`, `timestamp`, `text`, `reaction`) was blank. | Supply the actual value; do not invent IDs. |
 
 Tool errors arrive as text starting with `Error:`. Report the text instead of
 retrying the same call unchanged.

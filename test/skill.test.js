@@ -22,9 +22,9 @@ test("skill frontmatter names the skill and states when to use it", () => {
 test("skill maps every shipped tool", () => {
     const toolMap = skill.split("## Tool map")[1]?.split("## Recipes")[0];
     assert.ok(toolMap, "SKILL.md must contain a Tool map section");
-    for (const tool of TOOLS) {
-        assert.match(toolMap, new RegExp(`\`${tool.name}\``), `${tool.name} is missing from the tool map`);
-    }
+    const mapped = new Set([...toolMap.matchAll(/`(slack_[a-z_]+)`/g)].map((match) => match[1]));
+    const shipped = new Set(TOOLS.map((tool) => tool.name));
+    assert.deepEqual([...mapped].sort(), [...shipped].sort());
 });
 
 test("skill install command and version match package.json", () => {
