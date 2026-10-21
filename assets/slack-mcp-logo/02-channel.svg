@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="A channel hash inside a speech bubble">
+  <rect width="512" height="512" rx="116" fill="#0B1220"/>
+  <rect x="96" y="104" width="320" height="288" rx="96" fill="#F8FAFC"/>
+  <polygon points="200,384 168,448 272,392" fill="#F8FAFC"/>
+  <g fill="none" stroke="#0B1220" stroke-width="30" stroke-linecap="round">
+    <path d="M204 168V344"/>
+    <path d="M308 168V344"/>
+    <path d="M156 224H356"/>
+    <path d="M156 288H356"/>
+  </g>
+  <path d="M156 288H356" fill="none" stroke="#22D3EE" stroke-width="30" stroke-linecap="round"/>
+</svg>

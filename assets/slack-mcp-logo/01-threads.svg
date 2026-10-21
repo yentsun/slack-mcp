@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Two overlapping speech bubbles">
+  <rect width="512" height="512" rx="116" fill="#0B1220"/>
+  <rect x="80" y="112" width="264" height="192" rx="76" fill="#22D3EE"/>
+  <polygon points="168,280 136,360 232,300" fill="#22D3EE"/>
+  <rect x="168" y="208" width="264" height="192" rx="76" fill="#F8FAFC"/>
+  <polygon points="344,376 392,432 300,392" fill="#F8FAFC"/>
+  <circle cx="232" cy="304" r="18" fill="#0B1220"/>
+  <circle cx="300" cy="304" r="18" fill="#0B1220"/>
+  <circle cx="368" cy="304" r="18" fill="#0B1220"/>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="A connected node graph inside a speech bubble">
+  <rect width="512" height="512" rx="116" fill="#0B1220"/>
+  <rect x="96" y="128" width="288" height="224" rx="88" fill="#F8FAFC"/>
+  <polygon points="176,332 152,404 256,352" fill="#F8FAFC"/>
+  <g stroke="#0B1220" stroke-width="16" fill="none">
+    <path d="M208 240H304"/>
+    <path d="M208 240 256 304"/>
+    <path d="M304 240 256 304"/>
+  </g>
+  <circle cx="208" cy="240" r="26" fill="#0B1220"/>
+  <circle cx="304" cy="240" r="26" fill="#0B1220"/>
+  <circle cx="256" cy="304" r="26" fill="#22D3EE"/>
+</svg>
