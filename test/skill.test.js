@@ -36,6 +36,12 @@ test("server metadata version matches package.json", () => {
     assert.equal(SERVER_INFO.version, pkg.version);
 });
 
+test("README tool table maps every shipped tool", () => {
+    const mapped = new Set([...readme.matchAll(/`(slack_[a-z_]+)`/g)].map((match) => match[1]));
+    const shipped = new Set(TOOLS.map((tool) => tool.name));
+    assert.deepEqual([...mapped].sort(), [...shipped].sort());
+});
+
 test("README links the skill", () => {
     assert.match(readme, /skills\/slack-mcp\/SKILL\.md/);
 });
