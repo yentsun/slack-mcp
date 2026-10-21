@@ -47,6 +47,14 @@ test("loadConfig reads a config file", () => {
     assert.equal(config.userAgent, "test-agent");
 });
 
+test("loadConfig accepts a legacy env object with SLACK_MCP_CONFIG", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slack-mcp-config-"));
+    const configPath = path.join(dir, "config.json");
+    fs.writeFileSync(configPath, JSON.stringify({ allowedWriteChannels: ["C1"] }));
+    const config = loadConfig({ SLACK_MCP_CONFIG: configPath });
+    assert.deepEqual(config.allowedWriteChannels, ["C1"]);
+});
+
 test("loadConfig normalizes a comma-separated allowedWriteChannels string", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "slack-mcp-config-"));
     const configPath = path.join(dir, "config.json");

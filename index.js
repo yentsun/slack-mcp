@@ -66,7 +66,11 @@ function parseChannelList(value) {
         .filter(Boolean);
 }
 
-function loadConfig(configPath = DEFAULT_CONFIG_PATH) {
+function loadConfig(input = DEFAULT_CONFIG_PATH) {
+    const configPath =
+        typeof input === "string"
+            ? input
+            : input?.SLACK_MCP_CONFIG || DEFAULT_CONFIG_PATH;
     let fileConfig = {};
     if (fs.existsSync(configPath)) {
         try {
