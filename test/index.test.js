@@ -19,6 +19,8 @@ import {
     TOOLS,
 } from "../index.js";
 
+const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+
 test("tool definitions omit annotations unsupported by the OpenCode MCP catalog", () => {
     assert.ok(TOOLS.length > 0);
     for (const tool of TOOLS) {
@@ -27,7 +29,9 @@ test("tool definitions omit annotations unsupported by the OpenCode MCP catalog"
 });
 
 test("stdio server completes the MCP lifecycle and lists compatible tools", async (t) => {
-    const secretsDir = fs.mkdtempSync(path.join(os.tmpdir(), "yt-slack-mcp-secrets-"));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "yt-slack-mcp-home-"));
+    const secretsDir = path.join(home, ".config", "yt-slack-mcp", "secrets");
+    fs.mkdirSync(secretsDir, { recursive: true });
     fs.writeFileSync(path.join(secretsDir, "slack-xoxc.txt"), "xoxc-test");
     fs.writeFileSync(path.join(secretsDir, "slack-xoxd.txt"), "xoxd-test");
 
@@ -35,17 +39,20 @@ test("stdio server completes the MCP lifecycle and lists compatible tools", asyn
         command: process.execPath,
         args: ["index.js"],
         cwd: process.cwd(),
-        env: { ...process.env, SLACK_MCP_SECRETS_DIR: secretsDir },
+        env: { ...process.env, HOME: home, USERPROFILE: home },
         stderr: "pipe",
     });
     const client = new Client({ name: "yt-slack-mcp-test", version: "1.0.0" });
 
     t.after(async () => {
         await transport.close();
-        fs.rmSync(secretsDir, { recursive: true, force: true });
+        fs.rmSync(home, { recursive: true, force: true });
     });
 
     await client.connect(transport);
+    const serverVersion = client.getServerVersion();
+    assert.equal(serverVersion?.name, "yt-slack-mcp");
+    assert.equal(serverVersion?.version, pkg.version);
     const { tools } = await client.listTools();
 
     assert.equal(tools.length, TOOLS.length);

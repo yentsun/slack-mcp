@@ -20,6 +20,8 @@ import { fileURLToPath } from "url";
 
 const DEFAULT_SECRETS_DIR = path.join(os.homedir(), ".config", "yt-slack-mcp", "secrets");
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".config", "yt-slack-mcp", "config.json");
+const PACKAGE_INFO = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const SERVER_INFO = { name: "yt-slack-mcp", version: PACKAGE_INFO.version };
 
 const maxImageBytes = 10 * 1024 * 1024;
 const maxPdfBytes = 20 * 1024 * 1024;
@@ -46,14 +48,29 @@ function parseChannelList(value) {
     if (value === undefined || value === null || value === "") {
         return null;
     }
-    return value
-        .split(",")
-        .map((c) => c.trim())
+    const list = Array.isArray(value)
+        ? value
+        : typeof value === "string"
+          ? value.split(",")
+          : null;
+    if (list === null) {
+        throw new Error("channel IDs must be an array or a comma-separated string");
+    }
+    return list
+        .map((channel) => {
+            if (typeof channel !== "string") {
+                throw new Error("channel IDs must be strings");
+            }
+            return channel.trim();
+        })
         .filter(Boolean);
 }
 
-function loadConfig(env = process.env) {
-    const configPath = env.SLACK_MCP_CONFIG || DEFAULT_CONFIG_PATH;
+function loadConfig(input = DEFAULT_CONFIG_PATH) {
+    const configPath =
+        typeof input === "string"
+            ? input
+            : input?.SLACK_MCP_CONFIG || DEFAULT_CONFIG_PATH;
     let fileConfig = {};
     if (fs.existsSync(configPath)) {
         try {
@@ -63,15 +80,16 @@ function loadConfig(env = process.env) {
         }
     }
 
-    const secretsDir =
-        env.SLACK_MCP_SECRETS_DIR || expandHome(fileConfig.secretsDir) || DEFAULT_SECRETS_DIR;
-    const xoxcPath =
-        env.SLACK_MCP_XOXC_PATH || expandHome(fileConfig.xoxcPath) || path.join(secretsDir, "slack-xoxc.txt");
-    const xoxdPath =
-        env.SLACK_MCP_XOXD_PATH || expandHome(fileConfig.xoxdPath) || path.join(secretsDir, "slack-xoxd.txt");
-    const allowedWriteChannels =
-        parseChannelList(env.SLACK_MCP_ALLOWED_WRITE_CHANNELS) ?? fileConfig.allowedWriteChannels ?? [];
-    const userAgent = env.SLACK_MCP_USER_AGENT || fileConfig.userAgent || "Mozilla/5.0";
+    const secretsDir = expandHome(fileConfig.secretsDir) || DEFAULT_SECRETS_DIR;
+    const xoxcPath = expandHome(fileConfig.xoxcPath) || path.join(secretsDir, "slack-xoxc.txt");
+    const xoxdPath = expandHome(fileConfig.xoxdPath) || path.join(secretsDir, "slack-xoxd.txt");
+    let allowedWriteChannels;
+    try {
+        allowedWriteChannels = parseChannelList(fileConfig.allowedWriteChannels) ?? [];
+    } catch (e) {
+        throw new Error(`invalid Slack MCP config ${configPath}: ${e.message}`);
+    }
+    const userAgent = fileConfig.userAgent || "Mozilla/5.0";
 
     return { configPath, secretsDir, xoxcPath, xoxdPath, allowedWriteChannels, userAgent };
 }
@@ -645,7 +663,7 @@ async function main() {
     const { slackApi, formatMessages, uploadSlackFiles } = createSlackClient({ xoxcToken, xoxdToken, userAgent: config.userAgent });
 
     const server = new Server(
-        { name: "yt-slack-mcp", version: "0.1.0" },
+        SERVER_INFO,
         {
             capabilities: { tools: {} },
             instructions:
@@ -691,6 +709,8 @@ if (isMain) {
 
 export {
     TOOLS,
+    SERVER_INFO,
+    parseChannelList,
     parsePermalink,
     requireString,
     assertAllowedWriteChannel,
@@ -699,7 +719,6 @@ export {
     createSlackClient,
     loadConfig,
     expandHome,
-    parseChannelList,
     ReadPermalinkSchema,
     GetRepliesSchema,
     GetHistorySchema,
