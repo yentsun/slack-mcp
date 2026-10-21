@@ -9,6 +9,7 @@ A host-agnostic [Model Context Protocol](https://modelcontextprotocol.io) server
 - Return image attachments inline, extract text from PDFs, and return `text/*` attachment contents inline.
 - Retrieve private attachment contents through the authenticated Slack browser session.
 - Reply to a thread, add or remove a reaction, edit an authored message or thread reply, or upload local files only in explicitly allowed channel IDs.
+- Have no plain top-level text post: a reply needs an existing thread, and a file upload with an `initial_comment` is the only way to start a top-level message.
 - Prefix every message the agent posts with `🤖:` — or `🤖 <model>:` when the call names the model — so agent replies stand apart from the account's own messages; an edit can opt out with `agent_authored: false`.
 
 Attachment limits: images and text files are limited to 10 MB; text attachments are truncated at 100,000 characters. PDFs are limited to 20 MB, 50 pages, and 100,000 extracted characters.
@@ -19,11 +20,11 @@ Attachment limits: images and text files are limited to 10 MB; text attachments 
 |------|-------------|
 | `slack_read_permalink` | Read a message or thread from a channel, DM, or group-DM permalink, including supported attachments. |
 | `slack_get_replies` | Read replies for a thread by channel ID and timestamp. |
-| `slack_get_history` | Read recent channel history. |
+| `slack_get_history` | Read recent channel history by channel ID (up to 200 messages). |
 | `slack_reply_to_thread` | Reply to a thread, with optional `model`, in a `🤖:`-prefixed message; restricted to allowed channels. |
 | `slack_add_reaction` | Add a reaction; restricted to allowed channels. |
 | `slack_remove_reaction` | Remove a reaction added by this account; restricted to allowed channels. |
-| `slack_upload_files` | Upload up to 10 local files to a channel or thread, with an optional `initial_comment` prefixed with `🤖:` and an optional `model` (only used with a comment); returns file and message permalinks; restricted to allowed channels. |
+| `slack_upload_files` | Upload up to 10 local files (10 MB each) to a channel or thread, with an optional `initial_comment` prefixed with `🤖:` and an optional `model` (only used with a comment); returns file and message permalinks; restricted to allowed channels. |
 | `slack_edit_message` | Edit an authored message or thread reply by channel ID and timestamp; replaces the message text with `🤖:`-prefixed text and an optional `model`, or with the text as given when `agent_authored` is `false` (Slack removes any existing Block Kit blocks) and returns the updated timestamp and permalink; restricted to allowed channels. |
 
 ## Agent message prefix
@@ -90,8 +91,9 @@ All configuration lives in a JSON config file at
 
 By default the write tools (`slack_reply_to_thread`, `slack_add_reaction`,
 `slack_remove_reaction`, `slack_edit_message`) and `slack_upload_files` are
-locked down — no channel is writable. Each upload is limited to 10 MB. Every
-field is optional; a missing file just means defaults.
+locked down — no channel is writable. Each uploaded file is limited to 10 MB, and
+a call accepts at most 10 files. Every field is optional; a missing file just
+means defaults.
 
 ## Configuration
 
@@ -105,6 +107,11 @@ absent keys.
 | `xoxdPath` | `$SECRETS_DIR/slack-xoxd.txt` | Path to the `xoxd` token |
 | `allowedWriteChannels` | *(none)* | Channel IDs allowed for write tools |
 | `userAgent` | `Mozilla/5.0` | HTTP `User-Agent` header |
+
+Environment-variable configuration has been removed. Move any environment-supplied
+values into `~/.config/yt-slack-mcp/config.json`; the config path is fixed for the
+CLI. `allowedWriteChannels` accepts an array or a comma-separated string, so an
+old comma-separated value can be copied as-is.
 
 ## MCP host configuration
 
@@ -134,9 +141,6 @@ an Agent Skill so an agent knows when to read Slack, when a write is allowed,
 and which tool fits the request. Copy or symlink the `skills/slack-mcp`
 directory into your agent's skills directory (for example
 `.agents/skills/slack-mcp`); the server still needs the setup above.
-
-The skill is also prepared for the Agensi marketplace; the listing copy lives in
-[`skills/slack-mcp/LISTING.md`](skills/slack-mcp/LISTING.md).
 
 ## License
 

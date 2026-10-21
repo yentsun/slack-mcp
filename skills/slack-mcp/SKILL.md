@@ -1,6 +1,6 @@
 ---
 name: slack-mcp
-description: Read and write Slack through yt-slack-mcp — read permalinks, threads, channel history, and attachments; reply in threads, react, upload files, and edit messages in allowed channels. Use when asked to inspect a Slack link, summarize a channel or thread, find recent channel messages, or post, reply, or edit in Slack.
+description: Read and write Slack through yt-slack-mcp — read permalinks, threads, channel history, and attachments; reply in threads, react, upload files, and edit messages in allowed channels. Use when asked to inspect a Slack link, summarize a channel or thread, find recent channel messages, or reply, react, upload, or edit in Slack.
 ---
 
 # Slack MCP
@@ -8,7 +8,7 @@ description: Read and write Slack through yt-slack-mcp — read permalinks, thre
 Use the `yt-slack-mcp` MCP server through this skill. Read before writing, and
 write only where the channel allow-list permits.
 
-Server: `yt-slack-mcp` 0.5.0, launched as `npx yt-slack-mcp` over stdio.
+Server: `yt-slack-mcp` 0.6.0, launched as `npx yt-slack-mcp` over stdio.
 
 ## Setup and auth
 
@@ -66,7 +66,7 @@ action they asked for.
 |------|-------------|
 | `slack_read_permalink` | A Slack link is the input. Reads the linked message's thread, including inline images, PDF text, and text attachments. |
 | `slack_get_replies` | You have a channel ID and thread timestamp and need that thread again or its latest replies. |
-| `slack_get_history` | There is no link or thread: read recent messages in a channel, such as "what happened in #ops today". |
+| `slack_get_history` | There is no link or thread: read recent messages when you have a channel ID. The tool does not resolve channel names. |
 | `slack_reply_to_thread` | Post a reply into an existing thread. Requires `channel_id`, `thread_ts`, `text`, and preferably `model`. |
 | `slack_add_reaction` | Mark or acknowledge a message without posting text. |
 | `slack_remove_reaction` | Remove a reaction this account added. |
@@ -90,10 +90,12 @@ message. Say so instead of promising a text post.
 
 ### Summarize a channel
 
-1. Call `slack_get_history` with `channel_id` and `limit` up to 200.
-2. Summarize in the conversation, quoting `[ts]` values when the user needs to
+1. Resolve the channel ID first. The tool does not accept names like `#ops`; take
+   the ID from a permalink or ask the user.
+2. Call `slack_get_history` with `channel_id` and `limit` up to 200.
+3. Summarize in the conversation, quoting `[ts]` values when the user needs to
    locate a message.
-3. Post the summary only when asked, and only as a reply in a relevant thread or
+4. Post the summary only when asked, and only as a reply in a relevant thread or
    as a file upload's `initial_comment`; there is no plain top-level text post.
 
 ### Upload a file with a comment
@@ -127,4 +129,6 @@ message. Say so instead of promising a text post.
   once.
 - `agent_authored: false` is an explicit correction of non-agent text, not a
   default and not a way to hide that an agent posted.
+- Channel names are not resolved. Never pass `#name` as `channel_id`; use a
+  `C...`, `G...`, or `D...` ID from a permalink or ask the user.
 - Prefer edits over reposting. Do not "fix" a message by posting it again.

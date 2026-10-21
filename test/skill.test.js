@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TOOLS } from "../index.js";
+import { TOOLS, SERVER_INFO } from "../index.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const skill = fs.readFileSync(path.join(root, "skills", "slack-mcp", "SKILL.md"), "utf8");
-const listing = fs.readFileSync(path.join(root, "skills", "slack-mcp", "LISTING.md"), "utf8");
 const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
@@ -33,13 +32,15 @@ test("skill install command and version match package.json", () => {
     assert.match(skill, new RegExp(pkg.version.replace(/\./g, "\\.")));
 });
 
-test("README links the skill and the listing draft", () => {
+test("server metadata version matches package.json", () => {
+    assert.equal(SERVER_INFO.version, pkg.version);
+});
+
+test("README links the skill", () => {
     assert.match(readme, /skills\/slack-mcp\/SKILL\.md/);
-    assert.match(readme, /skills\/slack-mcp\/LISTING\.md/);
-    assert.ok(listing.includes("Trigger example"));
 });
 
 test("skill and README document file-based config only", () => {
     assert.doesNotMatch(skill, /SLACK_MCP_[A-Z_]+/);
-    assert.doesNotMatch(readme, /SLACK_MCP_[A-Z_]+|environment variables/);
+    assert.doesNotMatch(readme, /SLACK_MCP_[A-Z_]+/);
 });
