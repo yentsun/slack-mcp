@@ -15,6 +15,7 @@ import {
     ReplyToThreadSchema,
     AddReactionSchema,
     UploadFilesSchema,
+    SaveFileSchema,
     EditMessageSchema,
     TOOLS,
 } from "../index.js";
@@ -122,6 +123,15 @@ test("ReplyToThreadSchema requires all fields", () => {
 
 test("AddReactionSchema requires all fields", () => {
     assert.throws(() => AddReactionSchema.parse({}));
+});
+
+test("SaveFileSchema requires a file reference and destination path", () => {
+    assert.throws(() => SaveFileSchema.parse({}));
+    assert.throws(() => SaveFileSchema.parse({ file: "F1" }));
+    assert.throws(() => SaveFileSchema.parse({ destination_path: "C:/tmp/logo.svg" }));
+    const parsed = SaveFileSchema.parse({ file: "F1", destination_path: "C:/tmp/logo.svg" });
+    assert.equal(parsed.file, "F1");
+    assert.equal(parsed.destination_path, "C:/tmp/logo.svg");
 });
 
 test("EditMessageSchema requires all fields", () => {

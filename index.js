@@ -272,6 +272,52 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         return text;
     };
 
+    const resolveMessageFile = async ({ channelId, timestamp }) => {
+        const response = await slackApi("conversations.replies", {
+            channel: channelId,
+            ts: timestamp,
+            limit: "50",
+        });
+        const message = (response.messages || []).find((item) => item.ts === timestamp);
+        const files = message?.files || [];
+        if (!files.length) {
+            throw new Error(`no files attached to message ${timestamp} in ${channelId}`);
+        }
+        if (files.length > 1) {
+            const candidates = files
+                .map((file) => `${file.id || "unknown id"} (${file.name || file.title || "untitled"})`)
+                .join(", ");
+            throw new Error(
+                `message ${timestamp} has ${files.length} files; pass a file ID or file permalink to choose one: ${candidates}`
+            );
+        }
+        return files[0];
+    };
+
+    // Writes the attachment exactly as Slack stores it: the response body is
+    // kept as bytes, so binary formats such as SVG are never decoded as text.
+    const saveSlackFile = async ({ reference, destinationPath }) => {
+        const target = parseFileReference(reference);
+        const file = target.message ? await resolveMessageFile(target.message) : { id: target.fileId };
+        const fileData = await getSlackFileData(file);
+        const downloadUrl = fileData.url_private_download || fileData.url_private;
+        if (!downloadUrl) {
+            throw new Error("Slack did not provide a private download URL for this file");
+        }
+        const filename = safeFilename(fileData.name || fileData.title || fileData.id);
+        const savedPath = resolveDestinationPath(destinationPath, filename);
+        const response = await fetch(downloadUrl, { headers: slackHeaders() });
+        if (!response.ok) {
+            throw new Error(`Slack file download failed: ${response.status}`);
+        }
+        const data = Buffer.from(await response.arrayBuffer());
+        const mimeType = (response.headers.get("content-type") || fileData.mimetype || "application/octet-stream")
+            .split(";", 1)[0]
+            .trim();
+        fs.writeFileSync(savedPath, data);
+        return { path: savedPath, filename, mimeType };
+    };
+
     const uploadSlackFiles = async ({ filePaths, channelId, threadTs, initialComment }) => {
         const localFiles = filePaths.map((filePath) => {
             const fileStats = fs.statSync(filePath);
@@ -388,7 +434,7 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         return content;
     };
 
-    return { slackApi, formatMessages, uploadSlackFiles };
+    return { slackApi, formatMessages, uploadSlackFiles, saveSlackFile };
 }
 
 function parsePermalink(url) {
@@ -404,6 +450,66 @@ function requireString(value, name) {
         throw new Error(`missing ${name}`);
     }
     return value.trim();
+}
+
+// A saved attachment keeps the name Slack reports, but a path separator in it
+// must not let the name escape the destination directory the caller chose.
+function safeFilename(name) {
+    const value = String(name ?? "").trim().replace(/[\\/]+/g, "_");
+    return value && value !== "." && value !== ".." ? value : "slack-file";
+}
+
+// Resolves a destination that is either an existing directory (keep Slack's
+// filename) or the full path of the file to write. The parent directory must
+// already exist, so a typo fails before the attachment is downloaded.
+function resolveDestinationPath(destinationPath, filename) {
+    const value = requireString(destinationPath, "destination_path");
+    const resolved = path.resolve(expandHome(value));
+    let stats;
+    try {
+        stats = fs.statSync(resolved);
+    } catch {
+        stats = undefined;
+    }
+    if (stats?.isDirectory()) {
+        return path.join(resolved, filename);
+    }
+    if (stats && !stats.isFile()) {
+        throw new Error(`destination is not a regular file or directory: ${resolved}`);
+    }
+    if (!stats && /[\\/]$/.test(value)) {
+        throw new Error(`destination directory does not exist: ${resolved}`);
+    }
+    const directory = path.dirname(resolved);
+    let directoryStats;
+    try {
+        directoryStats = fs.statSync(directory);
+    } catch {
+        throw new Error(`destination directory does not exist: ${directory}`);
+    }
+    if (!directoryStats.isDirectory()) {
+        throw new Error(`destination parent is not a directory: ${directory}`);
+    }
+    return resolved;
+}
+
+// Accepts a Slack file ID (F…), a file permalink (/files/F…), or a message
+// permalink (/archives/C…/p…). Anything else is rejected rather than guessed.
+function parseFileReference(reference) {
+    const value = requireString(reference, "file");
+    const filePermalink = value.match(/\/files\/(?:[A-Z0-9]+\/)?(F[A-Z0-9]+)/i);
+    if (filePermalink) {
+        return { fileId: filePermalink[1].toUpperCase() };
+    }
+    if (/^F[A-Z0-9]+$/i.test(value)) {
+        return { fileId: value.toUpperCase() };
+    }
+    if (value.includes("/archives/")) {
+        return { message: parsePermalink(value) };
+    }
+    throw new Error(
+        `invalid Slack file reference: ${value} (expected a Slack permalink or a file ID such as F0123ABCD)`
+    );
 }
 
 function assertAllowedWriteChannel(channelId, allowed) {
@@ -477,6 +583,17 @@ const UploadFilesSchema = z.object({
     model: AgentModelField,
 });
 
+const SaveFileSchema = z.object({
+    file: z
+        .string()
+        .min(1)
+        .describe("Slack permalink for the message or file, or a Slack file ID such as F0123ABCD."),
+    destination_path: z
+        .string()
+        .min(1)
+        .describe("Local file path to write, or an existing directory that keeps the attachment's filename."),
+});
+
 const EditMessageSchema = z.object({
     channel_id: z.string(),
     timestamp: z.string().describe("Timestamp of the message or thread reply to edit."),
@@ -528,6 +645,12 @@ const TOOLS = [
         inputSchema: zodToJsonSchema(UploadFilesSchema),
     },
     {
+        name: "slack_save_file",
+        description:
+            "Save a file attached to a Slack message to a local path, keeping the original bytes. Accepts a message or file permalink, or a file ID. Returns the saved path, filename, and MIME type. Destination's parent directory must exist.",
+        inputSchema: zodToJsonSchema(SaveFileSchema),
+    },
+    {
         name: "slack_edit_message",
         description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text, prefixed with `🤖:` — or `🤖 <model>:` when model is given — unless it already carries the prefix; always pass model with the backend model ID you are running when you know it, and omit it only when you cannot determine it. Set agent_authored to false when the new text is not agent-written. Any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(EditMessageSchema),
@@ -536,7 +659,7 @@ const TOOLS = [
 
 // ── Execute factory (exported for tests) ─────────────────────────────────────
 
-function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, allowedWriteChannels }) {
+function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, saveSlackFile, allowedWriteChannels }) {
     const allowed = new Set(allowedWriteChannels);
     return async function executeToolCall(name, args) {
         switch (name) {
@@ -624,6 +747,22 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
                 };
             }
 
+            case "slack_save_file": {
+                const a = SaveFileSchema.parse(args);
+                const saved = await saveSlackFile({
+                    reference: requireString(a.file, "file"),
+                    destinationPath: requireString(a.destination_path, "destination_path"),
+                });
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `saved file: ${saved.path}\nfilename: ${saved.filename}\nmime type: ${saved.mimeType}`,
+                        },
+                    ],
+                };
+            }
+
             case "slack_edit_message": {
                 const a = EditMessageSchema.parse(args);
                 const channelId = requireString(a.channel_id, "channel_id");
@@ -691,14 +830,14 @@ async function main() {
         process.exit(1);
     }
 
-    const { slackApi, formatMessages, uploadSlackFiles } = createSlackClient({ xoxcToken, xoxdToken, userAgent: config.userAgent });
+    const { slackApi, formatMessages, uploadSlackFiles, saveSlackFile } = createSlackClient({ xoxcToken, xoxdToken, userAgent: config.userAgent });
 
     const server = new Server(
         SERVER_INFO,
         {
             capabilities: { tools: {} },
             instructions:
-                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels). Messages sent by the write tools are prefixed with `🤖:` by default, and slack_edit_message can opt out with agent_authored false; always pass model with the backend model ID you are running when you know it, for example claude-sonnet-4-5, so the prefix names the model — omit it only when you cannot determine it.",
+                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; save an attachment with slack_save_file; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels). Messages sent by the write tools are prefixed with `🤖:` by default, and slack_edit_message can opt out with agent_authored false; always pass model with the backend model ID you are running when you know it, for example claude-sonnet-4-5, so the prefix names the model — omit it only when you cannot determine it.",
         }
     );
 
@@ -708,6 +847,7 @@ async function main() {
         slackApi,
         formatMessages,
         uploadSlackFiles,
+        saveSlackFile,
         allowedWriteChannels: config.allowedWriteChannels,
     });
 
@@ -751,11 +891,15 @@ export {
     loadConfig,
     legacyEnvDiagnostic,
     expandHome,
+    parseFileReference,
+    safeFilename,
+    resolveDestinationPath,
     ReadPermalinkSchema,
     GetRepliesSchema,
     GetHistorySchema,
     ReplyToThreadSchema,
     AddReactionSchema,
     UploadFilesSchema,
+    SaveFileSchema,
     EditMessageSchema,
 };
