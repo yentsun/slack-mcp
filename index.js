@@ -310,7 +310,7 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
             throw new Error("Slack did not provide a private download URL for this file");
         }
         const filename = safeFilename(fileData.name || fileData.title || fileData.id);
-        const savedPath = resolveDestinationPath(destinationPath, filename);
+        const destination = resolveDestinationPath(destinationPath, filename);
         const response = await fetch(downloadUrl, { headers: slackHeaders() });
         if (!response.ok) {
             throw new Error(`Slack file download failed: ${response.status}`);
@@ -318,8 +318,8 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         const mimeType = (response.headers.get("content-type") || fileData.mimetype || "application/octet-stream")
             .split(";", 1)[0]
             .trim();
-        await writeResponseToFile(response, savedPath);
-        return { path: savedPath, filename: path.basename(savedPath), mimeType };
+        await writeResponseToFile(response, destination.path, { replaceExisting: destination.replaceExisting });
+        return { path: destination.path, filename: path.basename(destination.path), mimeType };
     };
 
     const uploadSlackFiles = async ({ filePaths, channelId, threadTs, initialComment }) => {
@@ -457,9 +457,9 @@ function requireString(value, name) {
 }
 
 // Streams a Slack download into a temporary file beside the destination and
-// renames it into place, so a failed transfer never leaves a partial attachment
+// moves it into place, so a failed transfer never leaves a partial attachment
 // and a large file never has to fit in memory.
-async function writeResponseToFile(response, destinationPath) {
+async function writeResponseToFile(response, destinationPath, { replaceExisting = false } = {}) {
     if (!response.body) {
         throw new Error("Slack returned an empty file response");
     }
@@ -471,11 +471,49 @@ async function writeResponseToFile(response, destinationPath) {
         throw new Error(`could not save Slack file: ${error.message}`);
     }
     try {
-        fs.renameSync(tempPath, destinationPath);
+        if (replaceExisting) {
+            // Replacing is allowed only for a path the caller named, and a
+            // symlink there means write the target rather than remove the link.
+            fs.renameSync(tempPath, resolveSymlinkTarget(destinationPath));
+        } else {
+            placeWithoutReplacing(tempPath, destinationPath);
+        }
     } catch (error) {
         fs.rmSync(tempPath, { force: true });
         throw error;
     }
+}
+
+// Links the finished temp file into place instead of renaming it, because link
+// fails with EEXIST when the destination appeared while the download ran.
+// Filesystems without hard-link support fall back to a checked rename.
+function placeWithoutReplacing(tempPath, destinationPath) {
+    try {
+        fs.linkSync(tempPath, destinationPath);
+    } catch (error) {
+        if (error.code === "EEXIST" || fs.existsSync(destinationPath)) {
+            throw new Error(`destination file already exists: ${destinationPath}; pass an explicit file path to overwrite it`);
+        }
+        fs.renameSync(tempPath, destinationPath);
+        return;
+    }
+    try {
+        fs.rmSync(tempPath, { force: true });
+    } catch {
+        // The destination link is in place; a leftover temp file is harmless.
+    }
+}
+
+function resolveSymlinkTarget(destinationPath) {
+    try {
+        if (fs.lstatSync(destinationPath).isSymbolicLink()) {
+            return fs.realpathSync(destinationPath);
+        }
+    } catch {
+        // A missing or inaccessible destination keeps the path the caller chose;
+        // the write below reports the real problem.
+    }
+    return destinationPath;
 }
 
 const WINDOWS_RESERVED_NAME = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
@@ -520,7 +558,7 @@ function resolveDestinationPath(destinationPath, filename) {
         if (fs.existsSync(target)) {
             throw new Error(`destination file already exists: ${target}; pass an explicit file path to overwrite it`);
         }
-        return target;
+        return { path: target, replaceExisting: false };
     }
     if (stats && !stats.isFile()) {
         throw new Error(`destination is not a regular file or directory: ${resolved}`);
@@ -536,7 +574,7 @@ function resolveDestinationPath(destinationPath, filename) {
     if (!directoryStats.isDirectory()) {
         throw new Error(`destination parent is not a directory: ${directory}`);
     }
-    return resolved;
+    return { path: resolved, replaceExisting: true };
 }
 
 // Accepts a Slack file ID (F…), a file permalink (/files/F…), or a message

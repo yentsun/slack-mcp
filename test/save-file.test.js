@@ -160,7 +160,7 @@ test("rejects invalid destination paths before downloading", async (t) => {
         () => resolveDestinationPath(`${missingDirectory}${path.sep}`, "logo.svg"),
         /destination directory does not exist/
     );
-    assert.equal(resolveDestinationPath(directory, "logo.svg"), path.join(directory, "logo.svg"));
+    assert.equal(resolveDestinationPath(directory, "logo.svg").path, path.join(directory, "logo.svg"));
 
     restoreFetch(t);
     let downloadAttempted = false;
@@ -231,6 +231,75 @@ test("refuses to overwrite a file in a directory destination", async (t) => {
     const saved = await saveSlackFile({ reference: "F1", destinationPath: existing });
     assert.equal(saved.filename, "logo.svg");
     assert.deepEqual(fs.readFileSync(existing), SVG);
+});
+
+test("refuses to overwrite a file that appears during the download", async (t) => {
+    const directory = tempDir(t);
+    const raced = path.join(directory, "logo.svg");
+    restoreFetch(t);
+    let downloadStarted = false;
+    globalThis.fetch = async (url) => {
+        if (String(url).startsWith("https://slack.com/api/files.info")) {
+            return Response.json({
+                ok: true,
+                file: {
+                    id: "F1",
+                    name: "logo.svg",
+                    mimetype: "image/svg+xml",
+                    url_private_download: "https://files.slack.com/files-pri/T1-F1/logo.svg",
+                },
+            });
+        }
+        if (!downloadStarted) {
+            downloadStarted = true;
+            fs.writeFileSync(raced, "raced copy");
+        }
+        return new Response(SVG, { status: 200, headers: { "content-type": "image/svg+xml" } });
+    };
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    await assert.rejects(
+        () => saveSlackFile({ reference: "F1", destinationPath: directory }),
+        /destination file already exists/
+    );
+    assert.equal(fs.readFileSync(raced, "utf8"), "raced copy");
+    assert.deepEqual(fs.readdirSync(directory), ["logo.svg"]);
+});
+
+test("writes through a symlinked destination to its target", async (t) => {
+    const directory = tempDir(t);
+    const target = path.join(directory, "target.svg");
+    const link = path.join(directory, "current.svg");
+    fs.writeFileSync(target, "original");
+    try {
+        fs.symlinkSync(target, link);
+    } catch (error) {
+        t.skip(`symlinks unavailable: ${error.code}`);
+        return;
+    }
+    restoreFetch(t);
+    globalThis.fetch = async (url) => {
+        if (String(url).startsWith("https://slack.com/api/files.info")) {
+            return Response.json({
+                ok: true,
+                file: {
+                    id: "F1",
+                    name: "logo.svg",
+                    mimetype: "image/svg+xml",
+                    url_private_download: "https://files.slack.com/files-pri/T1-F1/logo.svg",
+                },
+            });
+        }
+        return new Response(SVG, { status: 200, headers: { "content-type": "image/svg+xml" } });
+    };
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    const saved = await saveSlackFile({ reference: "F1", destinationPath: link });
+
+    assert.equal(saved.path, link);
+    assert.equal(saved.filename, "current.svg");
+    assert.deepEqual(fs.readFileSync(target), SVG);
+    assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
 });
 
 test("leaves no partial file when the download fails mid-stream", async (t) => {
