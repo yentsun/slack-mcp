@@ -8,6 +8,7 @@ import {
     createSlackClient,
     parseFileReference,
     resolveDestinationPath,
+    safeFilename,
 } from "../index.js";
 
 const SVG = Buffer.from(
@@ -110,7 +111,7 @@ test("saves a file ID to an explicit destination path", async (t) => {
     const saved = await saveSlackFile({ reference: "F0123ABCD", destinationPath: destination });
 
     assert.equal(saved.path, destination);
-    assert.equal(saved.filename, "icon.svg");
+    assert.equal(saved.filename, "renamed.svg");
     assert.equal(saved.mimeType, "image/svg+xml");
     assert.deepEqual(fs.readFileSync(destination), SVG);
 });
@@ -185,6 +186,101 @@ test("rejects invalid destination paths before downloading", async (t) => {
         /destination directory does not exist/
     );
     assert.equal(downloadAttempted, false);
+});
+
+test("sanitizes attachment names the local filesystem cannot write", () => {
+    assert.equal(safeFilename("Q3: plan.pdf", "win32"), "Q3_ plan.pdf");
+    assert.equal(safeFilename("report?.svg", "win32"), "report_.svg");
+    assert.equal(safeFilename("trailing. ", "win32"), "trailing");
+    assert.equal(safeFilename("CON.txt", "win32"), "_CON.txt");
+    assert.equal(safeFilename("Q3: plan.pdf", "linux"), "Q3: plan.pdf");
+    assert.equal(safeFilename("a/b.svg", "linux"), "a_b.svg");
+    assert.equal(safeFilename("..", "win32"), "slack-file");
+});
+
+test("refuses to overwrite a file in a directory destination", async (t) => {
+    const directory = tempDir(t);
+    const existing = path.join(directory, "logo.svg");
+    fs.writeFileSync(existing, "local copy");
+    restoreFetch(t);
+    let downloads = 0;
+    globalThis.fetch = async (url) => {
+        if (String(url).startsWith("https://slack.com/api/files.info")) {
+            return Response.json({
+                ok: true,
+                file: {
+                    id: "F1",
+                    name: "logo.svg",
+                    mimetype: "image/svg+xml",
+                    url_private_download: "https://files.slack.com/files-pri/T1-F1/logo.svg",
+                },
+            });
+        }
+        downloads += 1;
+        return new Response(SVG, { status: 200, headers: { "content-type": "image/svg+xml" } });
+    };
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    await assert.rejects(
+        () => saveSlackFile({ reference: "F1", destinationPath: directory }),
+        /destination file already exists/
+    );
+    assert.equal(downloads, 0);
+    assert.equal(fs.readFileSync(existing, "utf8"), "local copy");
+
+    const saved = await saveSlackFile({ reference: "F1", destinationPath: existing });
+    assert.equal(saved.filename, "logo.svg");
+    assert.deepEqual(fs.readFileSync(existing), SVG);
+});
+
+test("leaves no partial file when the download fails mid-stream", async (t) => {
+    const directory = tempDir(t);
+    restoreFetch(t);
+    globalThis.fetch = async (url) => {
+        if (String(url).startsWith("https://slack.com/api/files.info")) {
+            return Response.json({
+                ok: true,
+                file: {
+                    id: "F1",
+                    name: "logo.svg",
+                    mimetype: "image/svg+xml",
+                    url_private_download: "https://files.slack.com/files-pri/T1-F1/logo.svg",
+                },
+            });
+        }
+        const body = new ReadableStream({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode("<svg"));
+                controller.error(new Error("connection reset"));
+            },
+        });
+        return new Response(body, { status: 200, headers: { "content-type": "image/svg+xml" } });
+    };
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    await assert.rejects(
+        () => saveSlackFile({ reference: "F1", destinationPath: directory }),
+        /could not save Slack file/
+    );
+    assert.deepEqual(fs.readdirSync(directory), []);
+});
+
+test("reports filesystem access errors instead of blaming a missing directory", (t) => {
+    const directory = tempDir(t);
+    const originalStatSync = fs.statSync;
+    fs.statSync = () => {
+        const error = new Error("permission denied");
+        error.code = "EACCES";
+        throw error;
+    };
+    t.after(() => {
+        fs.statSync = originalStatSync;
+    });
+
+    assert.throws(
+        () => resolveDestinationPath(path.join(directory, "logo.svg"), "logo.svg"),
+        /could not access .*logo\.svg: EACCES/
+    );
 });
 
 test("asks for a file ID when a message has more than one attachment", async (t) => {

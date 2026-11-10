@@ -13,7 +13,7 @@ A host-agnostic [Model Context Protocol](https://modelcontextprotocol.io) server
 - Have no plain top-level text post: a reply needs an existing thread, and a file upload with an `initial_comment` is the only way to start a top-level message.
 - Prefix every message the agent posts with `🤖:` — or `🤖 <backend model ID>:` when the call names the model — so agent replies stand apart from the account's own messages; an edit can opt out with `agent_authored: false`.
 
-Attachment limits: images and text files are limited to 10 MB; text attachments are truncated at 100,000 characters. PDFs are limited to 20 MB, 50 pages, and 100,000 extracted characters. These limits apply to content returned inline; `slack_save_file` writes the attachment unchanged.
+Attachment limits: images and text files are limited to 10 MB; text attachments are truncated at 100,000 characters. PDFs are limited to 20 MB, 50 pages, and 100,000 extracted characters. These limits apply to content returned inline; `slack_save_file` streams the attachment unchanged to disk.
 
 ## Tools
 
@@ -23,7 +23,7 @@ Attachment limits: images and text files are limited to 10 MB; text attachments 
 | `slack_get_replies` | Read replies for a thread by channel ID and timestamp. |
 | `slack_get_history` | Read recent channel history by channel ID (up to 200 messages). |
 | `slack_get_history` | Read recent channel history by channel ID (up to 200 messages). |
-| `slack_save_file` | Save a file attached to a message to a local path from a Slack message permalink, file permalink, or file ID, preserving the original bytes; the destination's parent directory must exist, and a destination that is an existing directory keeps the attachment's filename; returns the saved path, filename, and MIME type. |
+| `slack_save_file` | Save a file attached to a message to a local path from a Slack message permalink, file permalink, or file ID, preserving the original bytes; the destination's parent directory must exist, and a destination that is an existing directory keeps the attachment's filename (replacing characters the local filesystem rejects) and refuses to overwrite an existing file — pass an explicit file path to overwrite; returns the saved path, filename, and MIME type. |
 | `slack_reply_to_thread` | Reply to a thread, with `model` set to the backend model ID when known, in a `🤖:`-prefixed message; restricted to allowed channels. |
 | `slack_add_reaction` | Add a reaction; restricted to allowed channels. |
 | `slack_remove_reaction` | Remove a reaction added by this account; restricted to allowed channels. |

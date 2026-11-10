@@ -12,9 +12,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { randomUUID } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { fileURLToPath } from "url";
 
 
@@ -295,7 +298,9 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
     };
 
     // Writes the attachment exactly as Slack stores it: the response body is
-    // kept as bytes, so binary formats such as SVG are never decoded as text.
+    // streamed to a temporary file beside the destination and renamed into
+    // place, so binary formats such as SVG are never decoded, large attachments
+    // are not buffered in memory, and a failed download leaves no partial file.
     const saveSlackFile = async ({ reference, destinationPath }) => {
         const target = parseFileReference(reference);
         const file = target.message ? await resolveMessageFile(target.message) : { id: target.fileId };
@@ -310,12 +315,11 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         if (!response.ok) {
             throw new Error(`Slack file download failed: ${response.status}`);
         }
-        const data = Buffer.from(await response.arrayBuffer());
         const mimeType = (response.headers.get("content-type") || fileData.mimetype || "application/octet-stream")
             .split(";", 1)[0]
             .trim();
-        fs.writeFileSync(savedPath, data);
-        return { path: savedPath, filename, mimeType };
+        await writeResponseToFile(response, savedPath);
+        return { path: savedPath, filename: path.basename(savedPath), mimeType };
     };
 
     const uploadSlackFiles = async ({ filePaths, channelId, threadTs, initialComment }) => {
@@ -452,27 +456,71 @@ function requireString(value, name) {
     return value.trim();
 }
 
-// A saved attachment keeps the name Slack reports, but a path separator in it
-// must not let the name escape the destination directory the caller chose.
-function safeFilename(name) {
-    const value = String(name ?? "").trim().replace(/[\\/]+/g, "_");
+// Streams a Slack download into a temporary file beside the destination and
+// renames it into place, so a failed transfer never leaves a partial attachment
+// and a large file never has to fit in memory.
+async function writeResponseToFile(response, destinationPath) {
+    if (!response.body) {
+        throw new Error("Slack returned an empty file response");
+    }
+    const tempPath = path.join(path.dirname(destinationPath), `.slack-save-${randomUUID()}.part`);
+    try {
+        await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath, { flags: "wx" }));
+    } catch (error) {
+        fs.rmSync(tempPath, { force: true });
+        throw new Error(`could not save Slack file: ${error.message}`);
+    }
+    try {
+        fs.renameSync(tempPath, destinationPath);
+    } catch (error) {
+        fs.rmSync(tempPath, { force: true });
+        throw error;
+    }
+}
+
+const WINDOWS_RESERVED_NAME = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
+
+// A saved attachment keeps the name Slack reports, but a path separator must
+// not let the name escape the destination directory, and Windows interprets
+// names such as "Q3: plan.pdf" as an alternate data stream on "Q3" while
+// reserved device names are unusable as files. Such characters are replaced on
+// Windows; other platforms keep the original name.
+function safeFilename(name, platform = process.platform) {
+    let value = String(name ?? "").trim().replace(/[\\/]+/g, "_");
+    if (platform === "win32") {
+        value = value.replace(/[<>:"|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/, "");
+        if (WINDOWS_RESERVED_NAME.test(value)) {
+            value = `_${value}`;
+        }
+    }
     return value && value !== "." && value !== ".." ? value : "slack-file";
 }
 
+function statDestinationPath(candidate) {
+    try {
+        return fs.statSync(candidate);
+    } catch (error) {
+        if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+            return undefined;
+        }
+        throw new Error(`could not access ${candidate}: ${error.code || error.message}`);
+    }
+}
+
 // Resolves a destination that is either an existing directory (keep Slack's
-// filename) or the full path of the file to write. The parent directory must
-// already exist, so a typo fails before the attachment is downloaded.
+// filename, refusing to replace a file already there) or the full path of the
+// file to write. The parent directory must already exist, so a typo fails
+// before the attachment is downloaded.
 function resolveDestinationPath(destinationPath, filename) {
     const value = requireString(destinationPath, "destination_path");
     const resolved = path.resolve(expandHome(value));
-    let stats;
-    try {
-        stats = fs.statSync(resolved);
-    } catch {
-        stats = undefined;
-    }
+    const stats = statDestinationPath(resolved);
     if (stats?.isDirectory()) {
-        return path.join(resolved, filename);
+        const target = path.join(resolved, filename);
+        if (fs.existsSync(target)) {
+            throw new Error(`destination file already exists: ${target}; pass an explicit file path to overwrite it`);
+        }
+        return target;
     }
     if (stats && !stats.isFile()) {
         throw new Error(`destination is not a regular file or directory: ${resolved}`);
@@ -481,10 +529,8 @@ function resolveDestinationPath(destinationPath, filename) {
         throw new Error(`destination directory does not exist: ${resolved}`);
     }
     const directory = path.dirname(resolved);
-    let directoryStats;
-    try {
-        directoryStats = fs.statSync(directory);
-    } catch {
+    const directoryStats = statDestinationPath(directory);
+    if (!directoryStats) {
         throw new Error(`destination directory does not exist: ${directory}`);
     }
     if (!directoryStats.isDirectory()) {
@@ -591,7 +637,9 @@ const SaveFileSchema = z.object({
     destination_path: z
         .string()
         .min(1)
-        .describe("Local file path to write, or an existing directory that keeps the attachment's filename."),
+        .describe(
+            "Local file path to write, or an existing directory that keeps the attachment's filename. An existing directory refuses to replace a file already there; pass an explicit file path to overwrite."
+        ),
 });
 
 const EditMessageSchema = z.object({
@@ -647,7 +695,7 @@ const TOOLS = [
     {
         name: "slack_save_file",
         description:
-            "Save a file attached to a Slack message to a local path, keeping the original bytes. Accepts a message or file permalink, or a file ID. Returns the saved path, filename, and MIME type. Destination's parent directory must exist.",
+            "Save a file attached to a Slack message to a local path, keeping the original bytes. Accepts a message or file permalink, or a file ID. Returns the saved path, filename, and MIME type. The destination's parent directory must exist; an existing directory keeps the attachment's filename, with characters the local filesystem rejects replaced, and refuses to overwrite an existing file.",
         inputSchema: zodToJsonSchema(SaveFileSchema),
     },
     {
