@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, expandHome, parseChannelList } from "../index.js";
+import { loadConfig, legacyEnvDiagnostic, expandHome, parseChannelList } from "../index.js";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -114,6 +114,69 @@ test("loadConfig ignores environment variables", () => {
             if (value === undefined) delete process.env[key];
             else process.env[key] = value;
         }
+        fs.rmSync(home, { recursive: true, force: true });
+    }
+});
+
+test("legacyEnvDiagnostic maps obsolete variables to config keys without values", () => {
+    const diagnostic = legacyEnvDiagnostic({
+        SLACK_MCP_SECRETS_DIR: "value-should-not-leak",
+        SLACK_MCP_ALLOWED_WRITE_CHANNELS: "C_LEAK_CHANNEL",
+        SLACK_MCP_CONFIG: "path-should-not-leak.json",
+    });
+    assert.match(diagnostic, /obsolete Slack MCP environment configuration/);
+    assert.match(diagnostic, /SLACK_MCP_SECRETS_DIR -> "secretsDir"/);
+    assert.match(diagnostic, /SLACK_MCP_ALLOWED_WRITE_CHANNELS -> "allowedWriteChannels"/);
+    assert.match(diagnostic, /SLACK_MCP_CONFIG -> ignored/);
+    assert.ok(diagnostic.includes(path.join(os.homedir(), ".config", "yt-slack-mcp", "config.json")));
+    assert.match(diagnostic, /deny-by-default/);
+    assert.ok(!diagnostic.includes("value-should-not-leak"));
+    assert.ok(!diagnostic.includes("C_LEAK_CHANNEL"));
+    assert.ok(!diagnostic.includes("path-should-not-leak.json"));
+});
+
+test("legacyEnvDiagnostic stays silent without obsolete variables", () => {
+    assert.equal(legacyEnvDiagnostic({}), null);
+    assert.equal(legacyEnvDiagnostic({ SLACK_MCP_SECRETS_DIR: "", SLACK_MCP_CONFIG: " " }), null);
+});
+
+test("startup reports obsolete environment configuration and keeps writes denied", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "slack-mcp-home-"));
+    const customSecrets = path.join(home, "custom-secrets");
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    for (const key of [
+        "SLACK_MCP_CONFIG",
+        "SLACK_MCP_SECRETS_DIR",
+        "SLACK_MCP_XOXC_PATH",
+        "SLACK_MCP_XOXD_PATH",
+        "SLACK_MCP_ALLOWED_WRITE_CHANNELS",
+        "SLACK_MCP_USER_AGENT",
+    ]) {
+        delete env[key];
+    }
+    env.SLACK_MCP_SECRETS_DIR = customSecrets;
+    env.SLACK_MCP_ALLOWED_WRITE_CHANNELS = "C_LEAK_CHANNEL";
+    try {
+        const result = spawnSync(process.execPath, ["index.js"], {
+            cwd: root,
+            env,
+            encoding: "utf8",
+        });
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, /obsolete Slack MCP environment configuration/);
+        assert.match(result.stderr, /SLACK_MCP_SECRETS_DIR -> "secretsDir"/);
+        assert.match(result.stderr, /SLACK_MCP_ALLOWED_WRITE_CHANNELS -> "allowedWriteChannels"/);
+        assert.match(result.stderr, /missing slack-xoxc\.txt/);
+        assert.ok(result.stderr.includes(path.join(home, ".config", "yt-slack-mcp", "config.json")));
+        assert.ok(!result.stderr.includes(customSecrets));
+        assert.ok(!result.stderr.includes("C_LEAK_CHANNEL"));
+
+        const config = loadConfig({
+            SLACK_MCP_CONFIG: "C:/nonexistent/config.json",
+            SLACK_MCP_ALLOWED_WRITE_CHANNELS: "C_LEAK_CHANNEL",
+        });
+        assert.deepEqual(config.allowedWriteChannels, []);
+    } finally {
         fs.rmSync(home, { recursive: true, force: true });
     }
 });

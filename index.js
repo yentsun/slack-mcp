@@ -94,6 +94,30 @@ function loadConfig(input = DEFAULT_CONFIG_PATH) {
     return { configPath, secretsDir, xoxcPath, xoxdPath, allowedWriteChannels, userAgent };
 }
 
+function legacyEnvDiagnostic(env = process.env) {
+    const mappings = [
+        ["SLACK_MCP_SECRETS_DIR", "secretsDir"],
+        ["SLACK_MCP_XOXC_PATH", "xoxcPath"],
+        ["SLACK_MCP_XOXD_PATH", "xoxdPath"],
+        ["SLACK_MCP_ALLOWED_WRITE_CHANNELS", "allowedWriteChannels"],
+        ["SLACK_MCP_USER_AGENT", "userAgent"],
+    ]
+        .filter(([key]) => typeof env[key] === "string" && env[key].trim() !== "")
+        .map(([key, configKey]) => `  ${key} -> "${configKey}"`);
+    if (typeof env.SLACK_MCP_CONFIG === "string" && env.SLACK_MCP_CONFIG.trim() !== "") {
+        mappings.push(`  SLACK_MCP_CONFIG -> ignored; the config path is fixed at ${DEFAULT_CONFIG_PATH}`);
+    }
+    if (mappings.length === 0) {
+        return null;
+    }
+    return [
+        "Warning: obsolete Slack MCP environment configuration detected. Environment-variable configuration has been removed and is ignored.",
+        `Move these settings into ${DEFAULT_CONFIG_PATH} and remove the variables from your MCP host environment:`,
+        ...mappings,
+        "Write tools stay deny-by-default until allowedWriteChannels is configured in the config file.",
+    ].join("\n");
+}
+
 function readSecret(filePath, label) {
     if (!fs.existsSync(filePath)) {
         throw new Error(`missing ${label} (looked at ${filePath})`);
@@ -643,6 +667,11 @@ function createExecuteToolCall({ slackApi, formatMessages, uploadSlackFiles, all
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+    const legacyDiagnostic = legacyEnvDiagnostic();
+    if (legacyDiagnostic) {
+        console.error(legacyDiagnostic);
+    }
+
     let config;
     try {
         config = loadConfig();
@@ -718,6 +747,7 @@ export {
     createExecuteToolCall,
     createSlackClient,
     loadConfig,
+    legacyEnvDiagnostic,
     expandHome,
     ReadPermalinkSchema,
     GetRepliesSchema,
