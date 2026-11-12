@@ -463,7 +463,8 @@ async function writeResponseToFile(response, destinationPath, { replaceExisting 
     if (!response.body) {
         throw new Error("Slack returned an empty file response");
     }
-    const tempPath = path.join(path.dirname(destinationPath), `.slack-save-${randomUUID()}.part`);
+    const target = replaceExisting ? resolveSymlinkTarget(destinationPath) : destinationPath;
+    const tempPath = path.join(path.dirname(target), `.slack-save-${randomUUID()}.part`);
     try {
         await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath, { flags: "wx" }));
     } catch (error) {
@@ -474,7 +475,7 @@ async function writeResponseToFile(response, destinationPath, { replaceExisting 
         if (replaceExisting) {
             // Replacing is allowed only for a path the caller named, and a
             // symlink there means write the target rather than remove the link.
-            fs.renameSync(tempPath, resolveSymlinkTarget(destinationPath));
+            fs.renameSync(tempPath, target);
         } else {
             placeWithoutReplacing(tempPath, destinationPath);
         }
@@ -504,16 +505,38 @@ function placeWithoutReplacing(tempPath, destinationPath) {
     }
 }
 
+// Follows a chain of symlinks so a save through a link writes the link's
+// target, including a target that does not exist yet. The returned path shares
+// a directory with the temp file, so cross-volume links are not renamed across
+// filesystems.
 function resolveSymlinkTarget(destinationPath) {
-    try {
-        if (fs.lstatSync(destinationPath).isSymbolicLink()) {
-            return fs.realpathSync(destinationPath);
+    let current = destinationPath;
+    const seen = new Set();
+    for (;;) {
+        let stats;
+        try {
+            stats = fs.lstatSync(current);
+        } catch (error) {
+            if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+                return current;
+            }
+            throw new Error(`could not access ${current}: ${error.code || error.message}`);
         }
-    } catch {
-        // A missing or inaccessible destination keeps the path the caller chose;
-        // the write below reports the real problem.
+        if (!stats.isSymbolicLink()) {
+            return current;
+        }
+        if (seen.has(current)) {
+            throw new Error(`could not resolve symlink ${destinationPath}: link loop`);
+        }
+        seen.add(current);
+        let linkTarget;
+        try {
+            linkTarget = fs.readlinkSync(current);
+        } catch (error) {
+            throw new Error(`could not access ${current}: ${error.code || error.message}`);
+        }
+        current = path.resolve(path.dirname(current), linkTarget);
     }
-    return destinationPath;
 }
 
 const WINDOWS_RESERVED_NAME = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;

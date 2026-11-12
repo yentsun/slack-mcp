@@ -302,6 +302,43 @@ test("writes through a symlinked destination to its target", async (t) => {
     assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
 });
 
+test("creates the target of a dangling symlink and keeps the link", async (t) => {
+    const directory = tempDir(t);
+    const realDirectory = path.join(directory, "real");
+    fs.mkdirSync(realDirectory);
+    const target = path.join(realDirectory, "new.svg");
+    const link = path.join(directory, "current.svg");
+    try {
+        fs.symlinkSync(path.join("real", "new.svg"), link);
+    } catch (error) {
+        t.skip(`symlinks unavailable: ${error.code}`);
+        return;
+    }
+    restoreFetch(t);
+    globalThis.fetch = async (url) => {
+        if (String(url).startsWith("https://slack.com/api/files.info")) {
+            return Response.json({
+                ok: true,
+                file: {
+                    id: "F1",
+                    name: "logo.svg",
+                    mimetype: "image/svg+xml",
+                    url_private_download: "https://files.slack.com/files-pri/T1-F1/logo.svg",
+                },
+            });
+        }
+        return new Response(SVG, { status: 200, headers: { "content-type": "image/svg+xml" } });
+    };
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    const saved = await saveSlackFile({ reference: "F1", destinationPath: link });
+
+    assert.equal(saved.path, link);
+    assert.equal(saved.filename, "current.svg");
+    assert.deepEqual(fs.readFileSync(target), SVG);
+    assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
+});
+
 test("leaves no partial file when the download fails mid-stream", async (t) => {
     const directory = tempDir(t);
     restoreFetch(t);
