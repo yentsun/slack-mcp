@@ -37,8 +37,8 @@ text of every posted message is prefixed with `🤖:` by default:
 🤖: deployed revision 4f2c1a9
 ```
 
-The MCP transport does not report which model is calling, so every write call
-passes `model` with the backend model ID it is running — for example
+The MCP transport does not report which model is calling, so a write call passes
+`model` with the backend model ID it is running — for example
 `claude-sonnet-4-5`, not a display name — and the prefix then names it:
 
 ```text

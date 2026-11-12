@@ -67,7 +67,7 @@ action they asked for.
 | `slack_read_permalink` | A Slack link is the input. Reads the linked message's thread, including inline images, PDF text, and text attachments. |
 | `slack_get_replies` | You have a channel ID and thread timestamp and need that thread again or its latest replies. |
 | `slack_get_history` | There is no link or thread: read recent messages when you have a channel ID. The tool does not resolve channel names. |
-| `slack_reply_to_thread` | Post a reply into an existing thread. Requires `channel_id`, `thread_ts`, `text`, and `model` set to your backend model ID. |
+| `slack_reply_to_thread` | Post a reply into an existing thread. Requires `channel_id`, `thread_ts`, `text`, and `model` set to your backend model ID whenever you can determine it. |
 | `slack_add_reaction` | Mark or acknowledge a message without posting text. |
 | `slack_remove_reaction` | Remove a reaction this account added. |
 | `slack_upload_files` | Post up to 10 local files (10 MB each) to a channel or thread, with an optional `initial_comment`. |

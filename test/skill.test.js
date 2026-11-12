@@ -40,6 +40,7 @@ test("write tools ask for the backend model ID and keep model optional", () => {
         const model = tool.inputSchema.properties.model;
         assert.equal(model.type, "string", `${name} model must stay a string`);
         assert.match(model.description, /backend model ID/i, `${name} must ask for the backend model ID`);
+        assert.match(tool.description, /backend model ID/i, `${name} must repeat the rule in its description`);
         assert.match(model.description, /claude-sonnet-4-5/, `${name} must show an ID-shaped example`);
         assert.doesNotMatch(model.description, /gpt-5\.1/, `${name} must not show a display-name example`);
         assert.equal(
