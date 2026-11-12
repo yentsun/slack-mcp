@@ -1,6 +1,6 @@
 ---
 name: slack-mcp
-description: Read and write Slack through yt-slack-mcp — read permalinks, threads, channel history, and attachments; reply in threads, react, upload files, and edit messages in allowed channels. Use when asked to inspect a Slack link, summarize a channel or thread, find recent channel messages, or reply, react, upload, or edit in Slack.
+description: Read and write Slack through yt-slack-mcp — read permalinks, threads, channel history, and attachments; save an attachment to a local file; reply in threads, react, upload files, and edit messages in allowed channels. Use when asked to inspect a Slack link, summarize a channel or thread, find recent channel messages, save an attachment, or reply, react, upload, or edit in Slack.
 ---
 
 # Slack MCP
@@ -65,6 +65,7 @@ action they asked for.
 | Tool | Use it when |
 |------|-------------|
 | `slack_read_permalink` | A Slack link is the input. Reads the linked message's thread, including inline images, PDF text, and text attachments. |
+| `slack_save_file` | The user needs an attachment on disk. Accepts a message or file permalink, or a file ID, plus `destination_path`; keeps the original bytes, replaces characters the OS rejects in the filename, and refuses to overwrite an existing file in a directory destination. Reports the saved path, filename, and MIME type. It is not channel-restricted. |
 | `slack_get_replies` | You have a channel ID and thread timestamp and need that thread again or its latest replies. |
 | `slack_get_history` | There is no link or thread: read recent messages when you have a channel ID. The tool does not resolve channel names. |
 | `slack_reply_to_thread` | Post a reply into an existing thread. Requires `channel_id`, `thread_ts`, `text`, and `model` set to your backend model ID whenever you can determine it. |
@@ -108,6 +109,18 @@ message. Say so instead of promising a text post.
    `initial_comment` is present, and without a comment the upload stays
    comment-free.
 4. Report the returned file and message permalinks.
+
+### Save an attachment to disk
+
+1. Take the message or file permalink, or the file ID, from the user.
+2. Resolve the destination: an existing directory keeps Slack's filename, with
+   characters the OS rejects replaced, and refuses to overwrite a file already
+   there; pass an explicit file path to overwrite. Its parent directory must
+   exist.
+3. Call `slack_save_file` with `file` and `destination_path`.
+4. Report the returned saved path, filename, and MIME type. If the message has
+   several attachments, the error lists their IDs; retry with the one the user
+   meant.
 
 ### Correct a posted message
 

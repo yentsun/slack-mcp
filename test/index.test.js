@@ -15,6 +15,7 @@ import {
     ReplyToThreadSchema,
     AddReactionSchema,
     UploadFilesSchema,
+    SaveFileSchema,
     EditMessageSchema,
     TOOLS,
 } from "../index.js";
@@ -67,6 +68,19 @@ test("parsePermalink extracts channel and timestamp", () => {
     );
     assert.equal(channelId, "C0123456789");
     assert.equal(timestamp, "1234567890.123456");
+});
+
+test("parsePermalink keeps the thread parent from reply permalinks", () => {
+    const reply = parsePermalink(
+        "https://example.slack.com/archives/C0123456789/p1234567890999999?thread_ts=1234567890.123456&cid=C0123456789"
+    );
+    assert.equal(reply.channelId, "C0123456789");
+    assert.equal(reply.timestamp, "1234567890.999999");
+    assert.equal(reply.threadTs, "1234567890.123456");
+    assert.equal(
+        parsePermalink("https://example.slack.com/archives/C0123456789/p1234567890123456").threadTs,
+        undefined
+    );
 });
 
 test("parsePermalink accepts direct-message and group-DM channels", () => {
@@ -122,6 +136,15 @@ test("ReplyToThreadSchema requires all fields", () => {
 
 test("AddReactionSchema requires all fields", () => {
     assert.throws(() => AddReactionSchema.parse({}));
+});
+
+test("SaveFileSchema requires a file reference and destination path", () => {
+    assert.throws(() => SaveFileSchema.parse({}));
+    assert.throws(() => SaveFileSchema.parse({ file: "F1" }));
+    assert.throws(() => SaveFileSchema.parse({ destination_path: "C:/tmp/logo.svg" }));
+    const parsed = SaveFileSchema.parse({ file: "F1", destination_path: "C:/tmp/logo.svg" });
+    assert.equal(parsed.file, "F1");
+    assert.equal(parsed.destination_path, "C:/tmp/logo.svg");
 });
 
 test("EditMessageSchema requires all fields", () => {
