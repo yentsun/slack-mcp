@@ -33,6 +33,8 @@ const maxPdfTextCharacters = 100_000;
 const maxTextFileBytes = 10 * 1024 * 1024;
 const maxTextFileCharacters = 100_000;
 const maxUploadBytes = 10 * 1024 * 1024;
+const threadPageSize = 200;
+const maxThreadPages = 10;
 
 function expandHome(filePath) {
     if (!filePath) {
@@ -278,14 +280,27 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
     const resolveMessageFile = async ({ channelId, timestamp, threadTs }) => {
         const rootTs = threadTs || timestamp;
         let cursor;
+        let pages = 0;
         const seenCursors = new Set();
         for (;;) {
-            const response = await slackApi("conversations.replies", {
-                channel: channelId,
-                ts: rootTs,
-                limit: "200",
-                cursor,
-            });
+            pages += 1;
+            let response;
+            try {
+                response = await slackApi("conversations.replies", {
+                    channel: channelId,
+                    ts: rootTs,
+                    limit: String(threadPageSize),
+                    cursor,
+                });
+            } catch (error) {
+                const reason = String(error?.message ?? error);
+                if (/ratelimit|rate_limited/i.test(reason)) {
+                    throw new Error(
+                        `${reason}. Retry later, or pass a Slack file ID or file permalink to skip the thread lookup.`
+                    );
+                }
+                throw error;
+            }
             const message = (response.messages || []).find((item) => item.ts === timestamp);
             if (message) {
                 const files = message.files || [];
@@ -305,6 +320,11 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
             const nextCursor = response.response_metadata?.next_cursor;
             if (!nextCursor || seenCursors.has(nextCursor)) {
                 break;
+            }
+            if (pages >= maxThreadPages) {
+                throw new Error(
+                    `message ${timestamp} is beyond the first ${maxThreadPages * threadPageSize} messages of thread ${rootTs} in ${channelId}; pass a Slack file ID or file permalink to choose the attachment directly`
+                );
             }
             seenCursors.add(nextCursor);
             cursor = nextCursor;

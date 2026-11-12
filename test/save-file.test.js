@@ -145,6 +145,46 @@ test("finds a file on a reply beyond the first thread page", async (t) => {
     assert.deepEqual(fs.readFileSync(path.join(directory, "logo.svg")), SVG);
 });
 
+test("stops scanning a very long thread and suggests a file ID", async (t) => {
+    restoreFetch(t);
+    let calls = 0;
+    globalThis.fetch = async (url) => {
+        assert.match(String(url), /\/api\/conversations\.replies\?/);
+        calls += 1;
+        return Response.json({
+            ok: true,
+            messages: [{ ts: "1234567890.000001" }],
+            response_metadata: { next_cursor: `page-${calls}` },
+        });
+    };
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    await assert.rejects(
+        () =>
+            saveSlackFile({
+                reference: "https://example.slack.com/archives/C0123456789/p1234567890123456",
+                destinationPath: os.tmpdir(),
+            }),
+        /beyond the first 2000 messages.*file ID or file permalink/
+    );
+    assert.equal(calls, 10);
+});
+
+test("suggests a file ID when the thread scan is rate limited", async (t) => {
+    restoreFetch(t);
+    globalThis.fetch = async () => Response.json({ ok: false, error: "ratelimited" });
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    await assert.rejects(
+        () =>
+            saveSlackFile({
+                reference: "https://example.slack.com/archives/C0123456789/p1234567890123456",
+                destinationPath: os.tmpdir(),
+            }),
+        /ratelimited\. Retry later, or pass a Slack file ID or file permalink to skip the thread lookup/
+    );
+});
+
 test("saves a file ID to an explicit destination path", async (t) => {
     const directory = tempDir(t);
     restoreFetch(t);
