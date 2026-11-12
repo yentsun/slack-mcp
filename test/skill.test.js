@@ -33,10 +33,13 @@ test("skill install command and version match package.json", () => {
 });
 
 test("write tools ask for the backend model ID and keep model optional", () => {
-    const writeTools = ["slack_reply_to_thread", "slack_upload_files", "slack_edit_message"];
-    for (const name of writeTools) {
-        const tool = TOOLS.find((candidate) => candidate.name === name);
-        assert.ok(tool, `${name} must be shipped`);
+    const writeTools = TOOLS.filter((tool) => tool.inputSchema.properties?.model);
+    assert.deepEqual(
+        writeTools.map((tool) => tool.name).sort(),
+        ["slack_edit_message", "slack_reply_to_thread", "slack_upload_files"]
+    );
+    for (const tool of writeTools) {
+        const name = tool.name;
         const model = tool.inputSchema.properties.model;
         assert.equal(model.type, "string", `${name} model must stay a string`);
         assert.match(model.description, /backend model ID/i, `${name} must ask for the backend model ID`);

@@ -50,6 +50,7 @@ test("stdio server completes the MCP lifecycle and lists compatible tools", asyn
     });
 
     await client.connect(transport);
+    assert.match(client.getInstructions() ?? "", /backend model ID/i);
     const serverVersion = client.getServerVersion();
     assert.equal(serverVersion?.name, "yt-slack-mcp");
     assert.equal(serverVersion?.version, pkg.version);
