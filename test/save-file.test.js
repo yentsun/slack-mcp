@@ -327,9 +327,16 @@ test("refuses to overwrite a file in a directory destination", async (t) => {
     assert.equal(downloads, 0);
     assert.equal(fs.readFileSync(existing, "utf8"), "local copy");
 
+    const posixModes = process.platform !== "win32";
+    if (posixModes) {
+        fs.chmodSync(existing, 0o640);
+    }
     const saved = await saveSlackFile({ reference: "F1", destinationPath: existing });
     assert.equal(saved.filename, "logo.svg");
     assert.deepEqual(fs.readFileSync(existing), SVG);
+    if (posixModes) {
+        assert.equal(fs.statSync(existing).mode & 0o777, 0o640);
+    }
 });
 
 test("refuses to overwrite a file that appears during the download", async (t) => {

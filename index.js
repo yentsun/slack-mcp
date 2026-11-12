@@ -516,6 +516,12 @@ async function writeResponseToFile(response, destinationPath, { replaceExisting 
         if (replaceExisting) {
             // Replacing is allowed only for a path the caller named, and a
             // symlink there means write the target rather than remove the link.
+            // Renaming creates a new inode, so carry the replaced file's mode
+            // over; ownership, ACLs, and xattrs are not preserved.
+            const mode = existingFileMode(target);
+            if (mode !== undefined) {
+                fs.chmodSync(tempPath, mode);
+            }
             fs.renameSync(tempPath, target);
         } else {
             placeWithoutReplacing(tempPath, destinationPath);
@@ -577,6 +583,20 @@ function resolveSymlinkTarget(destinationPath) {
             throw new Error(`could not access ${current}: ${error.code || error.message}`);
         }
         current = path.resolve(path.dirname(current), linkTarget);
+    }
+}
+
+// Returns the mode of an existing regular file so a replacement keeps it, or
+// undefined for a path that does not exist (or is not a file).
+function existingFileMode(filePath) {
+    try {
+        const stats = fs.statSync(filePath);
+        return stats.isFile() ? stats.mode & 0o777 : undefined;
+    } catch (error) {
+        if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+            return undefined;
+        }
+        throw error;
     }
 }
 
