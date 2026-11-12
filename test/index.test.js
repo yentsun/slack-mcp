@@ -70,6 +70,19 @@ test("parsePermalink extracts channel and timestamp", () => {
     assert.equal(timestamp, "1234567890.123456");
 });
 
+test("parsePermalink keeps the thread parent from reply permalinks", () => {
+    const reply = parsePermalink(
+        "https://example.slack.com/archives/C0123456789/p1234567890999999?thread_ts=1234567890.123456&cid=C0123456789"
+    );
+    assert.equal(reply.channelId, "C0123456789");
+    assert.equal(reply.timestamp, "1234567890.999999");
+    assert.equal(reply.threadTs, "1234567890.123456");
+    assert.equal(
+        parsePermalink("https://example.slack.com/archives/C0123456789/p1234567890123456").threadTs,
+        undefined
+    );
+});
+
 test("parsePermalink accepts direct-message and group-DM channels", () => {
     for (const channelId of ["D0123456789", "G0123456789"]) {
         const result = parsePermalink(

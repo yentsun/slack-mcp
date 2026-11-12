@@ -275,26 +275,41 @@ function createSlackClient({ xoxcToken, xoxdToken, userAgent = "Mozilla/5.0" }) 
         return text;
     };
 
-    const resolveMessageFile = async ({ channelId, timestamp }) => {
-        const response = await slackApi("conversations.replies", {
-            channel: channelId,
-            ts: timestamp,
-            limit: "50",
-        });
-        const message = (response.messages || []).find((item) => item.ts === timestamp);
-        const files = message?.files || [];
-        if (!files.length) {
-            throw new Error(`no files attached to message ${timestamp} in ${channelId}`);
+    const resolveMessageFile = async ({ channelId, timestamp, threadTs }) => {
+        const rootTs = threadTs || timestamp;
+        let cursor;
+        const seenCursors = new Set();
+        for (;;) {
+            const response = await slackApi("conversations.replies", {
+                channel: channelId,
+                ts: rootTs,
+                limit: "200",
+                cursor,
+            });
+            const message = (response.messages || []).find((item) => item.ts === timestamp);
+            if (message) {
+                const files = message.files || [];
+                if (!files.length) {
+                    throw new Error(`no files attached to message ${timestamp} in ${channelId}`);
+                }
+                if (files.length > 1) {
+                    const candidates = files
+                        .map((file) => `${file.id || "unknown id"} (${file.name || file.title || "untitled"})`)
+                        .join(", ");
+                    throw new Error(
+                        `message ${timestamp} has ${files.length} files; pass a file ID or file permalink to choose one: ${candidates}`
+                    );
+                }
+                return files[0];
+            }
+            const nextCursor = response.response_metadata?.next_cursor;
+            if (!nextCursor || seenCursors.has(nextCursor)) {
+                break;
+            }
+            seenCursors.add(nextCursor);
+            cursor = nextCursor;
         }
-        if (files.length > 1) {
-            const candidates = files
-                .map((file) => `${file.id || "unknown id"} (${file.name || file.title || "untitled"})`)
-                .join(", ");
-            throw new Error(
-                `message ${timestamp} has ${files.length} files; pass a file ID or file permalink to choose one: ${candidates}`
-            );
-        }
-        return files[0];
+        throw new Error(`message ${timestamp} not found in thread ${rootTs} in ${channelId}`);
     };
 
     // Writes the attachment exactly as Slack stores it: the response body is
@@ -446,7 +461,13 @@ function parsePermalink(url) {
     if (!match) {
         throw new Error("invalid Slack permalink");
     }
-    return { channelId: match[1], timestamp: `${match[2]}.${match[3]}` };
+    const parsed = { channelId: match[1], timestamp: `${match[2]}.${match[3]}` };
+    // Reply permalinks carry the thread's parent timestamp in the query string.
+    const threadTs = url.match(/[?&]thread_ts=(\d+\.\d+)/)?.[1];
+    if (threadTs) {
+        parsed.threadTs = threadTs;
+    }
+    return parsed;
 }
 
 function requireString(value, name) {

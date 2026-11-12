@@ -86,6 +86,65 @@ test("saves an SVG attachment from a message permalink byte for byte", async (t)
     assert.deepEqual(downloads, ["https://files.slack.com/files-pri/T1-F1/logo.svg"]);
 });
 
+test("finds a file on a reply beyond the first thread page", async (t) => {
+    const directory = tempDir(t);
+    restoreFetch(t);
+    const pageParams = [];
+    globalThis.fetch = async (url) => {
+        const parsed = new URL(String(url));
+        if (parsed.pathname.endsWith("/conversations.replies")) {
+            pageParams.push({
+                ts: parsed.searchParams.get("ts"),
+                limit: parsed.searchParams.get("limit"),
+                cursor: parsed.searchParams.get("cursor"),
+            });
+            if (!parsed.searchParams.get("cursor")) {
+                return Response.json({
+                    ok: true,
+                    messages: [{ ts: "1234567890.123456" }],
+                    response_metadata: { next_cursor: "page-2" },
+                });
+            }
+            return Response.json({
+                ok: true,
+                messages: [
+                    {
+                        ts: "1234567890.999999",
+                        files: [{ id: "F1", name: "logo.svg", mimetype: "image/svg+xml" }],
+                    },
+                ],
+                response_metadata: { next_cursor: "" },
+            });
+        }
+        if (parsed.pathname.endsWith("/files.info")) {
+            return Response.json({
+                ok: true,
+                file: {
+                    id: "F1",
+                    name: "logo.svg",
+                    mimetype: "image/svg+xml",
+                    url_private_download: "https://files.slack.com/files-pri/T1-F1/logo.svg",
+                },
+            });
+        }
+        return new Response(SVG, { status: 200, headers: { "content-type": "image/svg+xml" } });
+    };
+    const { saveSlackFile } = createSlackClient({ xoxcToken: "xoxc-test", xoxdToken: "xoxd-test" });
+
+    const saved = await saveSlackFile({
+        reference:
+            "https://example.slack.com/archives/C0123456789/p1234567890999999?thread_ts=1234567890.123456&cid=C0123456789",
+        destinationPath: directory,
+    });
+
+    assert.deepEqual(pageParams, [
+        { ts: "1234567890.123456", limit: "200", cursor: null },
+        { ts: "1234567890.123456", limit: "200", cursor: "page-2" },
+    ]);
+    assert.equal(saved.filename, "logo.svg");
+    assert.deepEqual(fs.readFileSync(path.join(directory, "logo.svg")), SVG);
+});
+
 test("saves a file ID to an explicit destination path", async (t) => {
     const directory = tempDir(t);
     restoreFetch(t);
