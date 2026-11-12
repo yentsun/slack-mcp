@@ -437,7 +437,9 @@ function withAgentPrefix(text, model) {
 const AgentModelField = z
     .string()
     .optional()
-    .describe("Model you are running, e.g. gpt-5.1, shown in the 🤖 prefix. Omit when unknown.");
+    .describe(
+        "Backend model ID you are running, for example claude-sonnet-4-5, not a display name; shown in the 🤖 prefix. Always pass it on an agent-authored post, and omit it only when your client cannot determine its model ID."
+    );
 
 const ReadPermalinkSchema = z.object({
     url: z.string().describe("Slack permalink, e.g. https://<workspace>.slack.com/archives/C.../p..."),
@@ -507,7 +509,7 @@ const TOOLS = [
     },
     {
         name: "slack_reply_to_thread",
-        description: "Reply to a Slack thread. The posted text is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; pass model to name the model writing it. Restricted to allowed channels.",
+        description: "Reply to a Slack thread. The posted text is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; always pass model with the backend model ID you are running when you know it, and omit it only when you cannot determine it. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(ReplyToThreadSchema),
     },
     {
@@ -522,12 +524,12 @@ const TOOLS = [
     },
     {
         name: "slack_upload_files",
-        description: "Upload one or more local files to a channel or thread. A given initial_comment is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; pass model to name the model writing it, and note that model has no effect without initial_comment. Restricted to allowed channels.",
+        description: "Upload one or more local files to a channel or thread. A given initial_comment is prefixed with `🤖:` — or `🤖 <model>:` when model is given — so readers can tell it came from an agent; always pass model with the backend model ID you are running when you know it (it has no effect without initial_comment), and omit it only when you cannot determine it. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(UploadFilesSchema),
     },
     {
         name: "slack_edit_message",
-        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text, prefixed with `🤖:` — or `🤖 <model>:` when model is given — unless it already carries the prefix; pass model to name the model writing it, and set agent_authored to false when the new text is not agent-written. Any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
+        description: "Edit an authored Slack message or thread reply by channel id and timestamp. Replaces the message text, prefixed with `🤖:` — or `🤖 <model>:` when model is given — unless it already carries the prefix; always pass model with the backend model ID you are running when you know it, and omit it only when you cannot determine it. Set agent_authored to false when the new text is not agent-written. Any existing Block Kit blocks are removed by Slack. Restricted to allowed channels.",
         inputSchema: zodToJsonSchema(EditMessageSchema),
     },
 ];
@@ -696,7 +698,7 @@ async function main() {
         {
             capabilities: { tools: {} },
             instructions:
-                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels). Messages sent by the write tools are prefixed with `🤖:` by default, and slack_edit_message can opt out with agent_authored false; pass model with the model you are running to include it in the prefix.",
+                "MCP server for Slack. Read with slack_read_permalink, slack_get_replies, slack_get_history; write with slack_reply_to_thread, slack_add_reaction, slack_remove_reaction, slack_upload_files, slack_edit_message (restricted to allowed channels). Messages sent by the write tools are prefixed with `🤖:` by default, and slack_edit_message can opt out with agent_authored false; always pass model with the backend model ID you are running when you know it, for example claude-sonnet-4-5, so the prefix names the model — omit it only when you cannot determine it.",
         }
     );
 

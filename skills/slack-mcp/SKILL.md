@@ -67,7 +67,7 @@ action they asked for.
 | `slack_read_permalink` | A Slack link is the input. Reads the linked message's thread, including inline images, PDF text, and text attachments. |
 | `slack_get_replies` | You have a channel ID and thread timestamp and need that thread again or its latest replies. |
 | `slack_get_history` | There is no link or thread: read recent messages when you have a channel ID. The tool does not resolve channel names. |
-| `slack_reply_to_thread` | Post a reply into an existing thread. Requires `channel_id`, `thread_ts`, `text`, and preferably `model`. |
+| `slack_reply_to_thread` | Post a reply into an existing thread. Requires `channel_id`, `thread_ts`, `text`, and `model` set to your backend model ID whenever you can determine it. |
 | `slack_add_reaction` | Mark or acknowledge a message without posting text. |
 | `slack_remove_reaction` | Remove a reaction this account added. |
 | `slack_upload_files` | Post up to 10 local files (10 MB each) to a channel or thread, with an optional `initial_comment`. |
@@ -86,7 +86,8 @@ message. Say so instead of promising a text post.
    returned message.
 3. Read the whole thread before answering; do not repost what is already there.
 4. Call `slack_reply_to_thread` with `channel_id`, `thread_ts`, `text`, and
-   `model` set to the model you are running.
+   `model` set to the backend model ID you are running, for example
+   `claude-sonnet-4-5` — not a display name.
 
 ### Summarize a channel
 
@@ -103,16 +104,17 @@ message. Say so instead of promising a text post.
 1. Resolve absolute local paths; at most 10 files, 10 MB each.
 2. Call `slack_upload_files` with `file_paths`, `channel_id`, an optional
    `thread_ts`, and `initial_comment` when a message should accompany the files.
-3. Pass `model`, which is used only when `initial_comment` is present; without a
-   comment the upload stays comment-free.
+3. Pass `model` with the backend model ID you are running; it is used only when
+   `initial_comment` is present, and without a comment the upload stays
+   comment-free.
 4. Report the returned file and message permalinks.
 
 ### Correct a posted message
 
 1. Call `slack_edit_message` with `channel_id`, the message `timestamp`, and the
    replacement `text`.
-2. Leave `agent_authored` at its default for agent-written text; pass `model` so
-   the prefix names the model.
+2. Leave `agent_authored` at its default for agent-written text; pass `model`
+   with your backend model ID so the prefix names the model.
 3. Pass `agent_authored: false` only when replacing agent text with the user's own
    words, such as correcting their message; `model` is then ignored.
 4. Slack removes existing Block Kit blocks on edit and only allows edits to this
@@ -124,9 +126,11 @@ message. Say so instead of promising a text post.
   requested text seems obvious.
 - Stay inside the allow-list. Never attempt a write to a channel that is not
   listed, and never suggest disabling the check to "make it work".
-- Pass `model` on every text-writing call — reply, upload with a comment, edit —
-  so posts read `🤖 <model>:`. Never add the prefix yourself; the server adds it
-  once.
+- Always pass `model` on every text-writing call — reply, upload with a comment,
+  edit — with the backend model ID you are running, for example
+  `claude-sonnet-4-5`, not a display name, so posts read `🤖 <model ID>:`. Omit it
+  only when you cannot determine your model ID. Never add the prefix yourself;
+  the server adds it once.
 - `agent_authored: false` is an explicit correction of non-agent text, not a
   default and not a way to hide that an agent posted.
 - Channel names are not resolved. Never pass `#name` as `channel_id`; use a
