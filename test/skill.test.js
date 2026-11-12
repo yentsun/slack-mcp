@@ -32,6 +32,26 @@ test("skill install command and version match package.json", () => {
     assert.match(skill, new RegExp(pkg.version.replace(/\./g, "\\.")));
 });
 
+test("write tools ask for the backend model ID and keep model optional", () => {
+    const writeTools = ["slack_reply_to_thread", "slack_upload_files", "slack_edit_message"];
+    for (const name of writeTools) {
+        const tool = TOOLS.find((candidate) => candidate.name === name);
+        assert.ok(tool, `${name} must be shipped`);
+        const model = tool.inputSchema.properties.model;
+        assert.equal(model.type, "string", `${name} model must stay a string`);
+        assert.match(model.description, /backend model ID/i, `${name} must ask for the backend model ID`);
+        assert.match(model.description, /claude-sonnet-4-5/, `${name} must show an ID-shaped example`);
+        assert.doesNotMatch(model.description, /gpt-5\.1/, `${name} must not show a display-name example`);
+        assert.equal(
+            (tool.inputSchema.required || []).includes("model"),
+            false,
+            `${name} must keep model optional`
+        );
+    }
+    assert.match(skill, /backend model ID/);
+    assert.match(readme, /backend model ID/);
+});
+
 test("server metadata version matches package.json", () => {
     assert.equal(SERVER_INFO.version, pkg.version);
 });

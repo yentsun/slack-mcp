@@ -10,7 +10,7 @@ A host-agnostic [Model Context Protocol](https://modelcontextprotocol.io) server
 - Retrieve private attachment contents through the authenticated Slack browser session.
 - Reply to a thread, add or remove a reaction, edit an authored message or thread reply, or upload local files only in explicitly allowed channel IDs.
 - Have no plain top-level text post: a reply needs an existing thread, and a file upload with an `initial_comment` is the only way to start a top-level message.
-- Prefix every message the agent posts with `🤖:` — or `🤖 <model>:` when the call names the model — so agent replies stand apart from the account's own messages; an edit can opt out with `agent_authored: false`.
+- Prefix every message the agent posts with `🤖:` — or `🤖 <backend model ID>:` when the call names the model — so agent replies stand apart from the account's own messages; an edit can opt out with `agent_authored: false`.
 
 Attachment limits: images and text files are limited to 10 MB; text attachments are truncated at 100,000 characters. PDFs are limited to 20 MB, 50 pages, and 100,000 extracted characters.
 
@@ -21,11 +21,11 @@ Attachment limits: images and text files are limited to 10 MB; text attachments 
 | `slack_read_permalink` | Read a message or thread from a channel, DM, or group-DM permalink, including supported attachments. |
 | `slack_get_replies` | Read replies for a thread by channel ID and timestamp. |
 | `slack_get_history` | Read recent channel history by channel ID (up to 200 messages). |
-| `slack_reply_to_thread` | Reply to a thread, with optional `model`, in a `🤖:`-prefixed message; restricted to allowed channels. |
+| `slack_reply_to_thread` | Reply to a thread, with `model` set to the backend model ID when known, in a `🤖:`-prefixed message; restricted to allowed channels. |
 | `slack_add_reaction` | Add a reaction; restricted to allowed channels. |
 | `slack_remove_reaction` | Remove a reaction added by this account; restricted to allowed channels. |
-| `slack_upload_files` | Upload up to 10 local files (10 MB each) to a channel or thread, with an optional `initial_comment` prefixed with `🤖:` and an optional `model` (only used with a comment); returns file and message permalinks; restricted to allowed channels. |
-| `slack_edit_message` | Edit an authored message or thread reply by channel ID and timestamp; replaces the message text with `🤖:`-prefixed text and an optional `model`, or with the text as given when `agent_authored` is `false` (Slack removes any existing Block Kit blocks) and returns the updated timestamp and permalink; restricted to allowed channels. |
+| `slack_upload_files` | Upload up to 10 local files (10 MB each) to a channel or thread, with an optional `initial_comment` prefixed with `🤖:` and `model` set to the backend model ID when known (only used with a comment); returns file and message permalinks; restricted to allowed channels. |
+| `slack_edit_message` | Edit an authored message or thread reply by channel ID and timestamp; replaces the message text with `🤖:`-prefixed text and `model` set to the backend model ID when known, or with the text as given when `agent_authored` is `false` (Slack removes any existing Block Kit blocks) and returns the updated timestamp and permalink; restricted to allowed channels. |
 
 ## Agent message prefix
 
@@ -37,12 +37,16 @@ text of every posted message is prefixed with `🤖:` by default:
 🤖: deployed revision 4f2c1a9
 ```
 
-The MCP transport does not report which model is calling, so a write tool call
-can pass `model` with the model it is running; the prefix then names it:
+The MCP transport does not report which model is calling, so every write call
+passes `model` with the backend model ID it is running — for example
+`claude-sonnet-4-5`, not a display name — and the prefix then names it:
 
 ```text
 🤖 claude-sonnet-4-5: deployed revision 4f2c1a9
 ```
+
+The parameter stays optional for a client that cannot determine its own model
+ID; without it the prefix is the bare `🤖:`.
 
 The prefix is added once: text that already starts with `🤖` is sent unchanged,
 so editing a prefixed message does not stack prefixes. A file upload without an
